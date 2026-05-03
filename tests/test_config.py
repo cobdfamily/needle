@@ -93,7 +93,7 @@ def test_every_endpoint_calls_audfprint(endpoints):
     different binary, catch it here."""
     valid_subcommands = {"match", "add", "new", "list"}
     for e in endpoints:
-        assert e["command"]["executable"] == "/app/.venv/bin/audfprint"
+        assert e["command"]["executable"] == "/app/bin/audfprint"
         assert e["command"]["args"][0] in valid_subcommands, \
             f"{e['name']} uses unexpected subcommand"
 
@@ -402,31 +402,32 @@ def test_admin_density_is_optional(endpoints):
         assert e["request"]["validations"]["density"]["type"] == "number"
 
 
-SAMPLE_SAVED = "Saved fprints for 1 files to /data/films/library.pklz"
-
-
-def test_admin_save_regex_captures_dbase_and_count(endpoints):
-    """The ``Saved fprints for N files to <pklz>`` line is what
-    audfprint emits on a successful add/new. Pin the regex
-    against the literal string."""
+def test_admin_add_and_build_use_text_output_mode(endpoints):
+    """``audfprint add`` and ``audfprint new`` log status
+    through Python's logging module — which writes to stderr,
+    not stdout — so a regex parser against stdout finds
+    nothing even on success. Both endpoints use ``mode: text``
+    and rely on the exit code: HTTP 200 == the .pklz now
+    contains the new entry. Verify via /admin/library/list
+    or /<category>/identify."""
     for name in ("admin-library-add", "admin-fine-build"):
         e = next(e for e in endpoints if e["name"] == name)
-        pattern = e["output"]["regex"]["pattern"]
-        m = re.compile(pattern, re.MULTILINE).search(SAMPLE_SAVED)
-        assert m, f"{name} regex didn't match the sample"
-        d = m.groupdict()
-        assert d["saved"] == "1"
-        assert d["dbase"] == "/data/films/library.pklz"
+        assert e["output"]["mode"] == "text", \
+            f"{name}: stdout is empty on success, must use text mode"
 
 
-SAMPLE_LIST_OUTPUT = """
-   /sources/films/inception.m4a
-   /sources/films/parasite.m4a
-   /sources/films/the-matrix.m4a
-""".strip()
+# audfprint list -v prints a Python list repr on a single DEBUG
+# line, like:
+#   DEBUG:audfprint2:['/path/a.wav (123 hashes)', '/path/b.wav (456 hashes)']
+# The regex captures each '<path> (<n> hashes)' entry independently.
+SAMPLE_LIST_OUTPUT = (
+    "DEBUG:audfprint2:['/sources/films/inception.m4a (1234 hashes)', "
+    "'/sources/films/parasite.m4a (1500 hashes)', "
+    "'/sources/films/the-matrix.m4a (980 hashes)']"
+)
 
 
-def test_admin_list_regex_yields_one_per_line(endpoints):
+def test_admin_list_regex_yields_one_per_track(endpoints):
     e = next(e for e in endpoints if e["name"] == "admin-library-list")
     pattern = e["output"]["regex"]["pattern"]
     matches = list(re.compile(pattern, re.MULTILINE).finditer(SAMPLE_LIST_OUTPUT))
@@ -436,3 +437,5 @@ def test_admin_list_regex_yields_one_per_line(endpoints):
         "/sources/films/parasite.m4a",
         "/sources/films/the-matrix.m4a",
     ]
+    # Hash count is captured too so operators can see DB depth.
+    assert [m["hashes"] for m in matches] == ["1234", "1500", "980"]

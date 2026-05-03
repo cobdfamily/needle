@@ -6,10 +6,12 @@ name: test
 #  - tests/test_config.py: structural + regex-pattern checks
 #    on the YAML, so a careless edit can't ship a malformed
 #    config that only surfaces at container start.
-#  - image build: builds the Dockerfile end-to-end (kibble
-#    base, ffmpeg apt-install, audfprint2 pip-install) so
-#    a Dockerfile-only break surfaces here on PR rather than
-#    at release time.
+#  - tests/test_e2e.py: brings up the locally-built image and
+#    walks the full flow (admin/fine/build -> admin/library/add
+#    -> admin/library/list -> /films/identify ->
+#    /films/timestamps) against deterministic-noise audio.
+#    Round-tripping the same fingerprint through add + match
+#    gives a strict, realistic exercise of every endpoint.
 
 on:
   push:
@@ -17,8 +19,9 @@ on:
   pull_request:
     branches: [main]
   # Nightly catches a url2code:latest base-image regression
-  # that breaks tools.yaml validation or the image build,
-  # without waiting for the next push to needle.
+  # that breaks tools.yaml validation, the image build, or the
+  # admin <-> match round-trip — without waiting for the next
+  # push to needle.
   schedule:
     - cron: "30 7 * * *"
   workflow_dispatch:
@@ -33,19 +36,29 @@ jobs:
       - run: python3 -m pip install -r tests/requirements.txt
       - run: python3 -m pytest tests/test_config.py -v
 
-  image:
+  e2e:
     runs-on: ubuntu-latest
     needs: [yaml]
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
-      - name: set up qemu
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: linux/amd64,linux/arm64
+      - name: configure docker for plain-HTTP kibble registry
+        # needle's Dockerfile pulls cobdfamily/url2code from
+        # kibble. The kibble registry speaks plain HTTP; the
+        # runner's docker daemon defaults to HTTPS-only, so
+        # flag kibble as insecure before any pull.
+        run: |
+          sudo mkdir -p /etc/docker
+          echo '{"insecure-registries":["kibble.apps.blindhub.ca"]}' \
+            | sudo tee /etc/docker/daemon.json >/dev/null
+          sudo systemctl restart docker
+          for i in $(seq 1 30); do
+            docker info >/dev/null 2>&1 && break
+            sleep 1
+          done
 
-      - name: set up buildx (kibble base over plain HTTP)
+      - name: set up buildx
         uses: docker/setup-buildx-action@v3
         with:
           buildkitd-config-inline: |
@@ -53,16 +66,52 @@ jobs:
               http = true
               insecure = true
 
-      - name: build image
+      - name: build image (loaded into local docker)
         uses: docker/build-push-action@v6
         with:
           context: .
           push: false
+          load: true
           # Only amd64 in CI — the runner is amd64 and a
           # multi-arch CI build doubles wall-time without
           # changing what the build can prove. release.yml
           # publishes both arches.
           platforms: linux/amd64
-          tags: cobdfamily/needle:ci
+          tags: kibble.apps.blindhub.ca/cobdfamily/needle:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: bring up stack
+        # Compose pulls ``needle:latest`` by default; the build
+        # step above tagged the local image with that name, so
+        # this is a no-network up.
+        run: docker compose up -d
+
+      - name: install python test deps
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r tests/requirements.txt
+
+      - name: wait for needle ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/ >/dev/null 2>&1; then
+              echo "needle ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::needle failed to come up in 120s"
+          docker compose ps
+          docker compose logs --tail=100
+          exit 1
+
+      - name: run E2E tests
+        run: python3 -m pytest tests/test_e2e.py -v
+
+      - name: dump logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+
+      - name: tear down
+        if: always()
+        run: docker compose down -v

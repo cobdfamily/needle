@@ -1,0 +1,35 @@
+# Local-dev / production-shape compose for needle.
+#
+# Pulls the published image from kibble by default; override
+# NEEDLE_TAG to pin a specific version. The data tree lives in a
+# named volume so the admin endpoints can write into it without
+# leaking state across runs (``docker compose down -v`` resets).
+#
+# The CI E2E suite at tests/test_e2e.py uses a locally-built image
+# instead — see .github/workflows/test.yml.
+
+services:
+  needle:
+    image: kibble.apps.blindhub.ca/cobdfamily/needle:${NEEDLE_TAG:-latest}
+    container_name: needle
+    ports:
+      - "${NEEDLE_HTTP_PORT:-8000}:8000"
+    volumes:
+      # :rw because the /admin/* endpoints write into the dbase
+      # tree. For an identification-only deployment, change to :ro
+      # and seed the volume out-of-band (see DEPLOYMENT.md).
+      - needle-data:/data:rw
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/', timeout=2).status==200 else 1)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  needle-data:

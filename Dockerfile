@@ -45,6 +45,19 @@ RUN uv pip install --no-cache --python /app/.venv/bin/python audfprint2
 # so a plain `COPY` over the same path is enough.
 COPY --chown=url2code:url2code config /app/config
 
+# Tiny shell wrapper around audfprint. Two reasons:
+#  * audfprint logs through Python's logging module (stderr);
+#    url2code's regex parser reads stdout. Wrapper merges
+#    stderr -> stdout so the parser sees match / "Saved..."
+#    lines.
+#  * ``audfprint add`` errors when the dbase doesn't exist;
+#    wrapper auto-switches to ``new`` so operators seeding a
+#    fresh data tree don't have to special-case the first call.
+COPY --chown=url2code:url2code bin /app/bin
+USER root
+RUN chmod 0755 /app/bin/audfprint
+USER url2code
+
 # CMD inherited from the base image
 # (uvicorn url2code.main:app --host 0.0.0.0 --port 8000) is
 # preserved; ENTRYPOINT is unset.

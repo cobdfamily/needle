@@ -43,7 +43,7 @@ endpoints:
       against the category-wide coarse fingerprint database at
       /data/films/library.pklz.
     command:
-      executable: /app/.venv/bin/audfprint
+      executable: /app/bin/audfprint
       args:
         - "match"
         - "-d"
@@ -75,7 +75,7 @@ endpoints:
       uploaded audio aligns inside that one file. Matches against
       /data/films/fine/<id>.pklz; up to 5 matches per query.
     command:
-      executable: /app/.venv/bin/audfprint
+      executable: /app/bin/audfprint
       args:
         - "match"
         - "-d"
@@ -111,7 +111,7 @@ endpoints:
     description: >-
       Identify which tv-episode the uploaded audio comes from.
     command:
-      executable: /app/.venv/bin/audfprint
+      executable: /app/bin/audfprint
       args:
         - "match"
         - "-d"
@@ -138,7 +138,7 @@ endpoints:
     description: >-
       For a known tv-episode id, return precise time ranges.
     command:
-      executable: /app/.venv/bin/audfprint
+      executable: /app/bin/audfprint
       args:
         - "match"
         - "-d"
@@ -174,7 +174,7 @@ endpoints:
     description: >-
       Identify which YouTube video the uploaded audio comes from.
     command:
-      executable: /app/.venv/bin/audfprint
+      executable: /app/bin/audfprint
       args:
         - "match"
         - "-d"
@@ -201,7 +201,7 @@ endpoints:
     description: >-
       For a known YouTube video id, return precise time ranges.
     command:
-      executable: /app/.venv/bin/audfprint
+      executable: /app/bin/audfprint
       args:
         - "match"
         - "-d"
@@ -239,7 +239,7 @@ endpoints:
       Tuned for ~60s clips: lower -N min-count so a 5-10s query
       still triggers a hit against a short reference.
     command:
-      executable: /app/.venv/bin/audfprint
+      executable: /app/bin/audfprint
       args:
         - "match"
         - "-d"
@@ -268,7 +268,7 @@ endpoints:
     description: >-
       For a known YouTube Short id, return precise time ranges.
     command:
-      executable: /app/.venv/bin/audfprint
+      executable: /app/bin/audfprint
       args:
         - "match"
         - "-d"
@@ -307,7 +307,7 @@ endpoints:
       Identify which Instagram Reel the uploaded audio comes from.
       Same tuning as shorts: lower -N for ~60s reference clips.
     command:
-      executable: /app/.venv/bin/audfprint
+      executable: /app/bin/audfprint
       args:
         - "match"
         - "-d"
@@ -336,7 +336,7 @@ endpoints:
     description: >-
       For a known Instagram Reel id, return precise time ranges.
     command:
-      executable: /app/.venv/bin/audfprint
+      executable: /app/bin/audfprint
       args:
         - "match"
         - "-d"
@@ -393,7 +393,7 @@ endpoints:
     defaults:
       density: "20"
     command:
-      executable: /app/.venv/bin/audfprint
+      executable: /app/bin/audfprint
       args:
         - "add"
         - "-d"
@@ -419,13 +419,13 @@ endpoints:
         # entry's track name in library.pklz.
         name_template: "{id}"
     output:
-      mode: regex_json
-      regex:
-        flags: [MULTILINE]
-        # ``add`` writes a "Saved fprints for N files to <pklz>"
-        # line on success. Capture the database path + count.
-        pattern: |-
-          Saved fprints for\s+(?P<saved>\d+)\s+files to\s+(?P<dbase>\S+)
+      # ``audfprint add`` logs "Saved fprints for ..." through
+      # Python's logging module — which lands on stderr, not
+      # stdout — so a regex parser against stdout finds nothing
+      # even on success. Use text mode and trust the exit code:
+      # HTTP 200 == add succeeded; the .pklz on disk now contains
+      # the new entry. Verify via /admin/library/list.
+      mode: text
 
   - name: admin-fine-build
     route: /admin/fine/build
@@ -438,7 +438,7 @@ endpoints:
     defaults:
       density: "40"
     command:
-      executable: /app/.venv/bin/audfprint
+      executable: /app/bin/audfprint
       args:
         - "new"
         - "-d"
@@ -465,25 +465,25 @@ endpoints:
         # which keeps the /timestamps response readable.
         name_template: "{id}"
     output:
-      mode: regex_json
-      regex:
-        flags: [MULTILINE]
-        pattern: |-
-          Saved fprints for\s+(?P<saved>\d+)\s+files to\s+(?P<dbase>\S+)
+      # See admin-library-add — audfprint new logs through Python
+      # logging (stderr); stdout is empty even on success.
+      mode: text
 
   - name: admin-library-list
     route: /admin/library/list
     method: POST
     description: >-
       List track names indexed in ``<category>/library.pklz``.
-      Output is one track per line; operators can correlate with
-      their canonical IDs via whatever side-table they keep.
+      Each row is one indexed file with its hash count;
+      operators correlate the path's basename to their
+      canonical ids (the upload was saved as ``<id>.<ext>``).
     command:
-      executable: /app/.venv/bin/audfprint
+      executable: /app/bin/audfprint
       args:
         - "list"
         - "-d"
         - "/data/{category}/library.pklz"
+        - "-v"
     request:
       validations:
         category:
@@ -494,7 +494,9 @@ endpoints:
       regex:
         flags: [MULTILINE]
         multiple: true
-        # ``list`` outputs one track-name per line. Strip leading
-        # / trailing whitespace; expose ``track`` per row.
+        # audfprint list with -v emits a Python list-repr on a
+        # single DEBUG line, like:
+        #   DEBUG:audfprint2:['/path/a.wav (123 hashes)', '/path/b.wav (456 hashes)']
+        # Match each ``'<path> (<n> hashes)'`` entry separately.
         pattern: |-
-          ^\s*(?P<track>\S.+\S)\s*$
+          '(?P<track>[^']+?)\s+\((?P<hashes>\d+)\s+hashes\)'

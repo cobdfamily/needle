@@ -1,0 +1,45 @@
+#!/bin/sh
+# Thin wrapper around the real audfprint that handles two
+# audfprint quirks that bite a YAML-defined HTTP wrapper:
+#
+# 1. audfprint logs match results / "Saved fprints..." status
+#    lines through Python's ``logging`` module — which writes to
+#    stderr by default. url2code's regex parser only sees stdout,
+#    so without a redirect the parser finds no matches even when
+#    audfprint succeeds. Everything here merges stderr into
+#    stdout (``2>&1``).
+#
+# 2. ``audfprint add --dbase X`` errors out when X does not yet
+#    exist (you'd need ``new`` for the first entry). Operators
+#    seeding a fresh data tree shouldn't have to know that — this
+#    wrapper transparently flips ``add`` to ``new`` if the dbase
+#    file isn't there. Subsequent ``add`` calls extend it normally.
+
+set -e
+AUDFPRINT="/app/.venv/bin/audfprint"
+
+if [ "$#" -eq 0 ]; then
+    exec "$AUDFPRINT" 2>&1
+fi
+
+SUB="$1"
+shift
+
+if [ "$SUB" = "add" ]; then
+    # The dbase path is the value of -d / --dbase. Walk the args
+    # looking for it, but don't disturb the order — ``audfprint``
+    # is order-sensitive only between subcommand and rest.
+    DBASE=""
+    prev=""
+    for a in "$@"; do
+        case "$prev" in
+            -d|--dbase) DBASE="$a"; break ;;
+        esac
+        prev="$a"
+    done
+    if [ -n "$DBASE" ] && [ ! -f "$DBASE" ]; then
+        SUB="new"
+    fi
+fi
+
+exec "$AUDFPRINT" "$SUB" "$@" 2>&1
