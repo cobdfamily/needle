@@ -95,6 +95,7 @@ out-of-band on a host with audfprint installed.
 curl -fsS -X POST \
   -H "X-Api-Key: $NEEDLE_ADMIN_KEY" \
   -F category=films \
+  -F id=tt0123456 \
   -F audio=@/sources/films/inception.m4a \
   https://match.cobd.ca/admin/library/add
 
@@ -135,13 +136,14 @@ admin endpoints to succeed (the match endpoints don't
 write, so a `:ro` mount is fine for an
 identification-only deployment).
 
-Track names in the .pklz files come from the upload's
-on-disk filename, which url2code generates as random
-hex. If you need stable IDs in the DB, either pre-stage
-the audio files on a host with audfprint (next section)
-or store a side-table mapping the random hex back to
-canonical IDs by reading the response of each
-`/admin/library/add` call.
+Track names in the .pklz files match the canonical
+``id`` you pass per call. Internally the upload is saved
+to ``<temp_dir>/<id>.<ext>``, so audfprint stores
+``/tmp/needle/uploads/admin-library-add/<id>.<ext>`` as
+the entry name. ``/identify`` then returns ``matched``
+with that path; the trailing component is your id.
+(This relies on `url2code >= 1.0.5`, which added
+``uploads[*].name_template`` for exactly this case.)
 
 ### Out-of-band: audfprint directly
 

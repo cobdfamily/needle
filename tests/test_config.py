@@ -347,6 +347,9 @@ def test_admin_library_add_uses_audfprint_add(endpoints):
     # Defaults to density 20 (audfprint default; same as library
     # match endpoints). Operators override per-call if needed.
     assert e["defaults"]["density"] == "20"
+    # ``id`` validation is required so the canonical id flows
+    # through to the upload's on-disk name.
+    assert "id" in e["request"]["validations"]
 
 
 def test_admin_fine_build_uses_audfprint_new(endpoints):
@@ -358,6 +361,24 @@ def test_admin_fine_build_uses_audfprint_new(endpoints):
     # Higher-density default than library — sub-second timestamps
     # in /timestamps need it.
     assert int(e["defaults"]["density"]) > 20
+
+
+def test_admin_uploads_use_name_template_for_canonical_id(endpoints):
+    """Both write-side admin endpoints save the upload as
+    ``<id>.<ext>`` rather than the default random-hex token —
+    that way audfprint records the canonical id in the .pklz
+    track names, instead of a hex token operators have to map
+    back through a side-table.
+
+    Pinned because the ``name_template`` -> ``{id}`` wiring is
+    load-bearing for the operator's lookup story; a careless
+    YAML edit removing it would silently regress to random hex
+    track names."""
+    for name in ("admin-library-add", "admin-fine-build"):
+        e = next(e for e in endpoints if e["name"] == name)
+        upload = e["uploads"][0]
+        assert upload.get("name_template") == "{id}", \
+            f"{name}: upload.name_template must be {{id}}"
 
 
 def test_admin_library_list_is_get_safe(endpoints):

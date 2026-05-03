@@ -386,7 +386,10 @@ endpoints:
     method: POST
     description: >-
       Add an audio file to ``<category>/library.pklz`` (the coarse,
-      multi-file database). Density defaults to 20 hashes/sec.
+      multi-file database) under canonical id ``{id}``. Density
+      defaults to 20 hashes/sec. The /identify call returns
+      ``matched`` as ``/tmp/needle/uploads/admin-library-add/{id}.<ext>``,
+      so the trailing path component is the canonical id.
     defaults:
       density: "20"
     command:
@@ -403,12 +406,18 @@ endpoints:
         category:
           type: enum
           choices: [films, tvshows, youtube, shorts, reels]
+        id:
+          type: text
         density:
           type: number
     uploads:
       - field_name: audio
         placeholder: audio
         temp_dir: /tmp/needle/uploads/admin-library-add
+        # Save the upload as ``<id>.<ext>`` so audfprint records
+        # the canonical id (rather than a random hex token) as the
+        # entry's track name in library.pklz.
+        name_template: "{id}"
     output:
       mode: regex_json
       regex:
@@ -450,6 +459,11 @@ endpoints:
       - field_name: audio
         placeholder: audio
         temp_dir: /tmp/needle/uploads/admin-fine-build
+        # Saving as ``<id>.<ext>`` is cosmetic for /admin/fine/build
+        # — the per-file fine pklz is keyed by id at the path layer
+        # already — but it makes the entry name in the pklz match,
+        # which keeps the /timestamps response readable.
+        name_template: "{id}"
     output:
       mode: regex_json
       regex:

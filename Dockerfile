@@ -39,6 +39,12 @@ USER url2code
 # pip of its own).
 RUN uv pip install --no-cache --python /app/.venv/bin/python audfprint2
 
+# Replace url2code's bundled example tools.yaml with needle's
+# YAML — this is the entire HTTP surface of the resulting image.
+# The base image's URL2CODE_CONFIG defaults to /app/config/tools.yaml,
+# so a plain `COPY` over the same path is enough.
+COPY --chown=url2code:url2code config /app/config
+
 # CMD inherited from the base image
 # (uvicorn url2code.main:app --host 0.0.0.0 --port 8000) is
 # preserved; ENTRYPOINT is unset.
