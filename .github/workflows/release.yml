@@ -1,0 +1,78 @@
+name: release
+
+# Builds and pushes the needle container image to the kibble
+# registry on every git tag matching v*. Tagged twice — by
+# version (v0.1.0 -> 0.1.0) and as latest. Deploy hosts pull
+# from kibble.apps.blindhub.ca/cobdfamily/needle:<version>.
+#
+# The kibble registry speaks plain HTTP, so buildkit is
+# configured to talk plain HTTP to it. The same config also
+# applies to the FROM line in the Dockerfile (which pulls
+# cobdfamily/url2code from the same registry).
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to rebuild (eg. v0.1.0)"
+        required: true
+
+env:
+  REGISTRY: kibble.apps.blindhub.ca
+  IMAGE: cobdfamily/needle
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: derive version (strip leading v)
+        id: ver
+        run: |
+          ref="${{ inputs.tag || github.ref_name }}"
+          echo "version=${ref#v}" >> "$GITHUB_OUTPUT"
+
+      - name: set up qemu (for arm64 cross-emulation)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: set up buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-config-inline: |
+            [registry."kibble.apps.blindhub.ca"]
+              http = true
+              insecure = true
+
+      - name: build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # Multi-arch matches the fleet; apple-silicon dev
+          # boxes pull native arm64.
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.ver.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: summary
+        run: |
+          {
+            echo "### Pushed"
+            echo ""
+            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.ver.outputs.version }}\`"
+            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE }}:latest\`"
+          } >> "$GITHUB_STEP_SUMMARY"

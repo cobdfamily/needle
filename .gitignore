@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Tests scratch
+tests/.venv/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Audio data — fingerprint databases live OUTSIDE the repo
+# (bind-mounted at /data in production). If anyone drops a
+# `data/` here for local experimentation, it stays untracked.
+data/
+
+# Audio scratch (recordings, samples used during development).
+# Audio is large and frequently re-derivable.
+*.wav
+*.mp3
+*.m4a
+*.opus
+*.webm
+*.flac
+*.ogg

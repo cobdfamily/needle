@@ -1,0 +1,68 @@
+name: test
+
+# needle has no Python source — the HTTP surface is entirely
+# defined in config/tools.yaml. CI runs:
+#
+#  - tests/test_config.py: structural + regex-pattern checks
+#    on the YAML, so a careless edit can't ship a malformed
+#    config that only surfaces at container start.
+#  - image build: builds the Dockerfile end-to-end (kibble
+#    base, ffmpeg apt-install, audfprint2 pip-install) so
+#    a Dockerfile-only break surfaces here on PR rather than
+#    at release time.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Nightly catches a url2code:latest base-image regression
+  # that breaks tools.yaml validation or the image build,
+  # without waiting for the next push to needle.
+  schedule:
+    - cron: "30 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  yaml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python3 -m pip install -r tests/requirements.txt
+      - run: python3 -m pytest tests/test_config.py -v
+
+  image:
+    runs-on: ubuntu-latest
+    needs: [yaml]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: set up qemu
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: set up buildx (kibble base over plain HTTP)
+        uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-config-inline: |
+            [registry."kibble.apps.blindhub.ca"]
+              http = true
+              insecure = true
+
+      - name: build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          # Only amd64 in CI — the runner is amd64 and a
+          # multi-arch CI build doubles wall-time without
+          # changing what the build can prove. release.yml
+          # publishes both arches.
+          platforms: linux/amd64
+          tags: cobdfamily/needle:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

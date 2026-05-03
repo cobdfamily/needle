@@ -1,0 +1,486 @@
+# needle — audio fingerprint matching, defined entirely in YAML.
+#
+# Two endpoint shapes per category:
+#
+#   POST /<category>/identify
+#     audfprint match against the category's coarse library
+#     pklz; returns the matched file plus a rough offset.
+#
+#   POST /<category>/timestamps?id=<file_id>
+#     audfprint match against the category-and-file-specific
+#     fine pklz; returns precise time ranges where the query
+#     audio aligns inside that one file.
+#
+# Both endpoints accept an audio upload as multipart form
+# field ``audio`` (mp3/m4a/wav/opus/webm/...). audfprint shells
+# out to ffmpeg for decoding, which the Dockerfile installs.
+#
+# Each ``audfprint match`` invocation runs with -R (find time
+# range) and -v (verbose) so the regex parser below can pull
+# out duration / start / end / hashes-matched fields.
+# Categories with shorter expected content (shorts, reels)
+# use a smaller min-count threshold (-N) so a 5-10s query
+# still triggers a hit.
+
+api:
+  title: needle
+  default_root: /
+
+logging:
+  level: INFO
+
+endpoints:
+
+  # ====================================================================
+  # films
+  # ====================================================================
+
+  - name: films-identify
+    route: /films/identify
+    method: POST
+    description: >-
+      Identify which film the uploaded audio comes from. Matches
+      against the category-wide coarse fingerprint database at
+      /data/films/library.pklz.
+    command:
+      executable: /app/.venv/bin/audfprint
+      args:
+        - "match"
+        - "-d"
+        - "/data/films/library.pklz"
+        - "-R"
+        - "-v"
+        - "-x"
+        - "1"
+        - "{audio}"
+    uploads:
+      - field_name: audio
+        placeholder: audio
+        temp_dir: /tmp/needle/uploads/films-identify
+    output:
+      mode: regex_json
+      regex:
+        flags: [MULTILINE]
+        # Captures either a match line (with -R -v) or a NOMATCH
+        # line. Caller checks ``no_match`` first; if non-null
+        # the audio was not in the library.
+        pattern: |-
+          (?:Matched\s+(?P<duration>[\d.]+)\s+s\s+starting at\s+(?P<query_start>[\d.]+)\s+s\s+in\s+\S+\s+to time\s+(?P<query_end>[\d.]+)\s+s\s+in\s+(?P<matched>.+?)\s+with\s+(?P<hashes_aligned>\d+)\s+of\s+(?P<hashes_total>\d+)\s+common hashes at rank\s+(?P<rank>\d+))|(?P<no_match>NOMATCH:\s+\S+)
+
+  - name: films-timestamps
+    route: /films/timestamps
+    method: POST
+    description: >-
+      For a known film id, return precise time ranges where the
+      uploaded audio aligns inside that one file. Matches against
+      /data/films/fine/<id>.pklz; up to 5 matches per query.
+    command:
+      executable: /app/.venv/bin/audfprint
+      args:
+        - "match"
+        - "-d"
+        - "/data/films/fine/{id}.pklz"
+        - "-R"
+        - "-v"
+        - "-x"
+        - "5"
+        - "{audio}"
+    request:
+      validations:
+        id:
+          type: text
+    uploads:
+      - field_name: audio
+        placeholder: audio
+        temp_dir: /tmp/needle/uploads/films-timestamps
+    output:
+      mode: regex_json
+      regex:
+        flags: [MULTILINE]
+        multiple: true
+        pattern: |-
+          Matched\s+(?P<duration>[\d.]+)\s+s\s+starting at\s+(?P<query_start>[\d.]+)\s+s\s+in\s+\S+\s+to time\s+(?P<query_end>[\d.]+)\s+s\s+in\s+(?P<matched>.+?)\s+with\s+(?P<hashes_aligned>\d+)\s+of\s+(?P<hashes_total>\d+)\s+common hashes at rank\s+(?P<rank>\d+)
+
+  # ====================================================================
+  # tvshows
+  # ====================================================================
+
+  - name: tvshows-identify
+    route: /tvshows/identify
+    method: POST
+    description: >-
+      Identify which tv-episode the uploaded audio comes from.
+    command:
+      executable: /app/.venv/bin/audfprint
+      args:
+        - "match"
+        - "-d"
+        - "/data/tvshows/library.pklz"
+        - "-R"
+        - "-v"
+        - "-x"
+        - "1"
+        - "{audio}"
+    uploads:
+      - field_name: audio
+        placeholder: audio
+        temp_dir: /tmp/needle/uploads/tvshows-identify
+    output:
+      mode: regex_json
+      regex:
+        flags: [MULTILINE]
+        pattern: |-
+          (?:Matched\s+(?P<duration>[\d.]+)\s+s\s+starting at\s+(?P<query_start>[\d.]+)\s+s\s+in\s+\S+\s+to time\s+(?P<query_end>[\d.]+)\s+s\s+in\s+(?P<matched>.+?)\s+with\s+(?P<hashes_aligned>\d+)\s+of\s+(?P<hashes_total>\d+)\s+common hashes at rank\s+(?P<rank>\d+))|(?P<no_match>NOMATCH:\s+\S+)
+
+  - name: tvshows-timestamps
+    route: /tvshows/timestamps
+    method: POST
+    description: >-
+      For a known tv-episode id, return precise time ranges.
+    command:
+      executable: /app/.venv/bin/audfprint
+      args:
+        - "match"
+        - "-d"
+        - "/data/tvshows/fine/{id}.pklz"
+        - "-R"
+        - "-v"
+        - "-x"
+        - "5"
+        - "{audio}"
+    request:
+      validations:
+        id:
+          type: text
+    uploads:
+      - field_name: audio
+        placeholder: audio
+        temp_dir: /tmp/needle/uploads/tvshows-timestamps
+    output:
+      mode: regex_json
+      regex:
+        flags: [MULTILINE]
+        multiple: true
+        pattern: |-
+          Matched\s+(?P<duration>[\d.]+)\s+s\s+starting at\s+(?P<query_start>[\d.]+)\s+s\s+in\s+\S+\s+to time\s+(?P<query_end>[\d.]+)\s+s\s+in\s+(?P<matched>.+?)\s+with\s+(?P<hashes_aligned>\d+)\s+of\s+(?P<hashes_total>\d+)\s+common hashes at rank\s+(?P<rank>\d+)
+
+  # ====================================================================
+  # youtube — long-form
+  # ====================================================================
+
+  - name: youtube-identify
+    route: /youtube/identify
+    method: POST
+    description: >-
+      Identify which YouTube video the uploaded audio comes from.
+    command:
+      executable: /app/.venv/bin/audfprint
+      args:
+        - "match"
+        - "-d"
+        - "/data/youtube/library.pklz"
+        - "-R"
+        - "-v"
+        - "-x"
+        - "1"
+        - "{audio}"
+    uploads:
+      - field_name: audio
+        placeholder: audio
+        temp_dir: /tmp/needle/uploads/youtube-identify
+    output:
+      mode: regex_json
+      regex:
+        flags: [MULTILINE]
+        pattern: |-
+          (?:Matched\s+(?P<duration>[\d.]+)\s+s\s+starting at\s+(?P<query_start>[\d.]+)\s+s\s+in\s+\S+\s+to time\s+(?P<query_end>[\d.]+)\s+s\s+in\s+(?P<matched>.+?)\s+with\s+(?P<hashes_aligned>\d+)\s+of\s+(?P<hashes_total>\d+)\s+common hashes at rank\s+(?P<rank>\d+))|(?P<no_match>NOMATCH:\s+\S+)
+
+  - name: youtube-timestamps
+    route: /youtube/timestamps
+    method: POST
+    description: >-
+      For a known YouTube video id, return precise time ranges.
+    command:
+      executable: /app/.venv/bin/audfprint
+      args:
+        - "match"
+        - "-d"
+        - "/data/youtube/fine/{id}.pklz"
+        - "-R"
+        - "-v"
+        - "-x"
+        - "5"
+        - "{audio}"
+    request:
+      validations:
+        id:
+          type: text
+    uploads:
+      - field_name: audio
+        placeholder: audio
+        temp_dir: /tmp/needle/uploads/youtube-timestamps
+    output:
+      mode: regex_json
+      regex:
+        flags: [MULTILINE]
+        multiple: true
+        pattern: |-
+          Matched\s+(?P<duration>[\d.]+)\s+s\s+starting at\s+(?P<query_start>[\d.]+)\s+s\s+in\s+\S+\s+to time\s+(?P<query_end>[\d.]+)\s+s\s+in\s+(?P<matched>.+?)\s+with\s+(?P<hashes_aligned>\d+)\s+of\s+(?P<hashes_total>\d+)\s+common hashes at rank\s+(?P<rank>\d+)
+
+  # ====================================================================
+  # shorts (YouTube Shorts) — short-form, lower min-count
+  # ====================================================================
+
+  - name: shorts-identify
+    route: /shorts/identify
+    method: POST
+    description: >-
+      Identify which YouTube Short the uploaded audio comes from.
+      Tuned for ~60s clips: lower -N min-count so a 5-10s query
+      still triggers a hit against a short reference.
+    command:
+      executable: /app/.venv/bin/audfprint
+      args:
+        - "match"
+        - "-d"
+        - "/data/shorts/library.pklz"
+        - "-R"
+        - "-v"
+        - "-N"
+        - "3"
+        - "-x"
+        - "1"
+        - "{audio}"
+    uploads:
+      - field_name: audio
+        placeholder: audio
+        temp_dir: /tmp/needle/uploads/shorts-identify
+    output:
+      mode: regex_json
+      regex:
+        flags: [MULTILINE]
+        pattern: |-
+          (?:Matched\s+(?P<duration>[\d.]+)\s+s\s+starting at\s+(?P<query_start>[\d.]+)\s+s\s+in\s+\S+\s+to time\s+(?P<query_end>[\d.]+)\s+s\s+in\s+(?P<matched>.+?)\s+with\s+(?P<hashes_aligned>\d+)\s+of\s+(?P<hashes_total>\d+)\s+common hashes at rank\s+(?P<rank>\d+))|(?P<no_match>NOMATCH:\s+\S+)
+
+  - name: shorts-timestamps
+    route: /shorts/timestamps
+    method: POST
+    description: >-
+      For a known YouTube Short id, return precise time ranges.
+    command:
+      executable: /app/.venv/bin/audfprint
+      args:
+        - "match"
+        - "-d"
+        - "/data/shorts/fine/{id}.pklz"
+        - "-R"
+        - "-v"
+        - "-N"
+        - "3"
+        - "-x"
+        - "5"
+        - "{audio}"
+    request:
+      validations:
+        id:
+          type: text
+    uploads:
+      - field_name: audio
+        placeholder: audio
+        temp_dir: /tmp/needle/uploads/shorts-timestamps
+    output:
+      mode: regex_json
+      regex:
+        flags: [MULTILINE]
+        multiple: true
+        pattern: |-
+          Matched\s+(?P<duration>[\d.]+)\s+s\s+starting at\s+(?P<query_start>[\d.]+)\s+s\s+in\s+\S+\s+to time\s+(?P<query_end>[\d.]+)\s+s\s+in\s+(?P<matched>.+?)\s+with\s+(?P<hashes_aligned>\d+)\s+of\s+(?P<hashes_total>\d+)\s+common hashes at rank\s+(?P<rank>\d+)
+
+  # ====================================================================
+  # reels (Instagram Reels) — short-form, same tuning as shorts
+  # ====================================================================
+
+  - name: reels-identify
+    route: /reels/identify
+    method: POST
+    description: >-
+      Identify which Instagram Reel the uploaded audio comes from.
+      Same tuning as shorts: lower -N for ~60s reference clips.
+    command:
+      executable: /app/.venv/bin/audfprint
+      args:
+        - "match"
+        - "-d"
+        - "/data/reels/library.pklz"
+        - "-R"
+        - "-v"
+        - "-N"
+        - "3"
+        - "-x"
+        - "1"
+        - "{audio}"
+    uploads:
+      - field_name: audio
+        placeholder: audio
+        temp_dir: /tmp/needle/uploads/reels-identify
+    output:
+      mode: regex_json
+      regex:
+        flags: [MULTILINE]
+        pattern: |-
+          (?:Matched\s+(?P<duration>[\d.]+)\s+s\s+starting at\s+(?P<query_start>[\d.]+)\s+s\s+in\s+\S+\s+to time\s+(?P<query_end>[\d.]+)\s+s\s+in\s+(?P<matched>.+?)\s+with\s+(?P<hashes_aligned>\d+)\s+of\s+(?P<hashes_total>\d+)\s+common hashes at rank\s+(?P<rank>\d+))|(?P<no_match>NOMATCH:\s+\S+)
+
+  - name: reels-timestamps
+    route: /reels/timestamps
+    method: POST
+    description: >-
+      For a known Instagram Reel id, return precise time ranges.
+    command:
+      executable: /app/.venv/bin/audfprint
+      args:
+        - "match"
+        - "-d"
+        - "/data/reels/fine/{id}.pklz"
+        - "-R"
+        - "-v"
+        - "-N"
+        - "3"
+        - "-x"
+        - "5"
+        - "{audio}"
+    request:
+      validations:
+        id:
+          type: text
+    uploads:
+      - field_name: audio
+        placeholder: audio
+        temp_dir: /tmp/needle/uploads/reels-timestamps
+    output:
+      mode: regex_json
+      regex:
+        flags: [MULTILINE]
+        multiple: true
+        pattern: |-
+          Matched\s+(?P<duration>[\d.]+)\s+s\s+starting at\s+(?P<query_start>[\d.]+)\s+s\s+in\s+\S+\s+to time\s+(?P<query_end>[\d.]+)\s+s\s+in\s+(?P<matched>.+?)\s+with\s+(?P<hashes_aligned>\d+)\s+of\s+(?P<hashes_total>\d+)\s+common hashes at rank\s+(?P<rank>\d+)
+
+  # ====================================================================
+  # admin — write paths into the database tree
+  #
+  # NO BUILT-IN AUTH. These endpoints mutate the bind-mounted /data
+  # tree. The deploy host is expected to gate them at the proxy
+  # layer with an API key (see DEPLOYMENT.md). The data volume
+  # must also be mounted ``:rw`` for these to succeed.
+  #
+  # Track names in the .pklz files come from the upload's on-disk
+  # filename, which url2code generates as random hex. Operators
+  # who need stable IDs in the DB should pre-stage their audio
+  # files with the right names and use audfprint directly, OR
+  # store a side-table mapping the random hex back to canonical
+  # IDs after each /admin/library/add call (the response echoes
+  # the saved filename so the mapping is recoverable).
+  # ====================================================================
+
+  - name: admin-library-add
+    route: /admin/library/add
+    method: POST
+    description: >-
+      Add an audio file to ``<category>/library.pklz`` (the coarse,
+      multi-file database). Density defaults to 20 hashes/sec.
+    defaults:
+      density: "20"
+    command:
+      executable: /app/.venv/bin/audfprint
+      args:
+        - "add"
+        - "-d"
+        - "/data/{category}/library.pklz"
+        - "-n"
+        - "{density}"
+        - "{audio}"
+    request:
+      validations:
+        category:
+          type: enum
+          choices: [films, tvshows, youtube, shorts, reels]
+        density:
+          type: number
+    uploads:
+      - field_name: audio
+        placeholder: audio
+        temp_dir: /tmp/needle/uploads/admin-library-add
+    output:
+      mode: regex_json
+      regex:
+        flags: [MULTILINE]
+        # ``add`` writes a "Saved fprints for N files to <pklz>"
+        # line on success. Capture the database path + count.
+        pattern: |-
+          Saved fprints for\s+(?P<saved>\d+)\s+files to\s+(?P<dbase>\S+)
+
+  - name: admin-fine-build
+    route: /admin/fine/build
+    method: POST
+    description: >-
+      Create the fine-grained single-file database at
+      ``<category>/fine/<id>.pklz`` from one audio upload. Density
+      defaults to 40 hashes/sec — twice what library.pklz uses,
+      for sub-second timestamp precision in the /timestamps call.
+    defaults:
+      density: "40"
+    command:
+      executable: /app/.venv/bin/audfprint
+      args:
+        - "new"
+        - "-d"
+        - "/data/{category}/fine/{id}.pklz"
+        - "-n"
+        - "{density}"
+        - "{audio}"
+    request:
+      validations:
+        category:
+          type: enum
+          choices: [films, tvshows, youtube, shorts, reels]
+        id:
+          type: text
+        density:
+          type: number
+    uploads:
+      - field_name: audio
+        placeholder: audio
+        temp_dir: /tmp/needle/uploads/admin-fine-build
+    output:
+      mode: regex_json
+      regex:
+        flags: [MULTILINE]
+        pattern: |-
+          Saved fprints for\s+(?P<saved>\d+)\s+files to\s+(?P<dbase>\S+)
+
+  - name: admin-library-list
+    route: /admin/library/list
+    method: POST
+    description: >-
+      List track names indexed in ``<category>/library.pklz``.
+      Output is one track per line; operators can correlate with
+      their canonical IDs via whatever side-table they keep.
+    command:
+      executable: /app/.venv/bin/audfprint
+      args:
+        - "list"
+        - "-d"
+        - "/data/{category}/library.pklz"
+    request:
+      validations:
+        category:
+          type: enum
+          choices: [films, tvshows, youtube, shorts, reels]
+    output:
+      mode: regex_json
+      regex:
+        flags: [MULTILINE]
+        multiple: true
+        # ``list`` outputs one track-name per line. Strip leading
+        # / trailing whitespace; expose ``track`` per row.
+        pattern: |-
+          ^\s*(?P<track>\S.+\S)\s*$
