@@ -18,23 +18,26 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 
+# Pre-create the bind-mount target while still root, owned by the
+# unprivileged runtime user so the admin endpoints can write to
+# the mount when the operator opts into a :rw bind. A `docker run`
+# without -v boots cleanly (every endpoint that touches /data will
+# 502 until the operator mounts a real data tree, but the
+# container itself starts).
+RUN mkdir -p /data \
+ && chown url2code:url2code /data
+
 # Drop privileges before pip-installing into the venv so the new
 # site-packages stay owned by the unprivileged runtime user the
 # url2code base image already created.
 USER url2code
 
 # audfprint2 — fork of the Columbia audfprint, packages well as a
-# CLI: `audfprint2 match`, `audfprint2 new`, `audfprint2 add`, ...
+# CLI: `audfprint match`, `audfprint new`, `audfprint add`, ...
 # url2code's runtime image already ships `uv`; use it to land
 # audfprint2 in the venv at /app/.venv (the uv-built venv has no
 # pip of its own).
 RUN uv pip install --no-cache --python /app/.venv/bin/python audfprint2
-
-# Pre-create the bind-mount target so a `docker run` without -v
-# still starts cleanly (every endpoint will 404 until the
-# operator mounts a real data tree, but the container itself
-# boots).
-RUN mkdir -p /data
 
 # CMD inherited from the base image
 # (uvicorn url2code.main:app --host 0.0.0.0 --port 8000) is
