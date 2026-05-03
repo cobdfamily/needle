@@ -55,7 +55,7 @@ COPY --chown=url2code:url2code config /app/config
 #    fresh data tree don't have to special-case the first call.
 COPY --chown=url2code:url2code bin /app/bin
 USER root
-RUN chmod 0755 /app/bin/audfprint
+RUN chmod 0755 /app/bin/audfprint /app/bin/cat-yaml-as-json
 USER url2code
 
 # CMD inherited from the base image

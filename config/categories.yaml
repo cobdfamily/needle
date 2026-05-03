@@ -1,0 +1,70 @@
+# Curated catalog of audio categories needle exposes.
+#
+# This file is the canonical source of truth for category
+# metadata. tools.yaml's per-category match endpoints and
+# admin enum lists are checked against it by tests in CI.
+#
+# Adding a category:
+#   1. Add an entry here.
+#   2. Add the matching /<slug>/identify and /<slug>/timestamps
+#      endpoints to tools.yaml.
+#   3. Extend the `category` enum on the three admin endpoints
+#      (admin-library-add, admin-fine-build, admin-library-list).
+# The structural test suite catches drift between (1) and (2/3).
+#
+# Per-entry fields:
+#   slug             URL-safe slug; becomes the route prefix
+#                    and the value of the `category` form param.
+#   name             Human-readable label (for clients).
+#   description      What kind of audio this category holds.
+#   library_density  Default -n for the coarse library.pklz
+#                    when an admin calls /admin/library/add.
+#   fine_density     Default -n for the per-file fine.pklz
+#                    when an admin calls /admin/fine/build.
+#   min_count        -N override for short content (~60s ref
+#                    clips need a lower threshold so a 5-10s
+#                    query still triggers a hit). null means
+#                    "use audfprint's default of 5."
+#
+# /admin/categories serves this file (converted to JSON
+# on the wire by bin/cat-yaml-as-json) so consumers can
+# discover valid slugs without reading the README.
+
+- slug: films
+  name: Films
+  description: Long-form cinema audio (~90-180 min).
+  library_density: 20
+  fine_density: 40
+  min_count: null
+
+- slug: tvshows
+  name: TV episodes
+  description: Episodic series audio (~22-60 min).
+  library_density: 20
+  fine_density: 40
+  min_count: null
+
+- slug: youtube
+  name: YouTube videos
+  description: Long-form YouTube audio, no length cap.
+  library_density: 20
+  fine_density: 40
+  min_count: null
+
+# shorts and reels share short-form tuning. ~60s reference
+# clips with min_count=3 let a 5-10s query trigger a hit;
+# audfprint's default of 5 tends to NOMATCH at this length.
+
+- slug: shorts
+  name: YouTube Shorts
+  description: ~60s reference clips.
+  library_density: 20
+  fine_density: 40
+  min_count: 3
+
+- slug: reels
+  name: Instagram Reels
+  description: ~60s reference clips, same tuning as shorts.
+  library_density: 20
+  fine_density: 40
+  min_count: 3

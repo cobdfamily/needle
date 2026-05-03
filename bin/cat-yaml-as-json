@@ -1,0 +1,34 @@
+#!/bin/sh
+# Convert a YAML file to a single-line JSON document on
+# stdout. Designed to plug into url2code's `native_json`
+# output mode -- url2code parses the stdout as JSON and
+# returns it as `parsed_output` on the response.
+#
+# Lets us keep the source-of-truth catalog as YAML
+# (comments, multi-line strings, anchors) while the wire
+# format stays JSON for clients.
+#
+# url2code's runtime venv at /app/.venv ships PyYAML for
+# its own config loader; we reuse that interpreter rather
+# than relying on whatever python3 resolves to on PATH.
+#
+# usage:
+#   cat-yaml-as-json <path-to-file.yaml>
+
+set -e
+
+INPUT="$1"
+if [ -z "$INPUT" ]; then
+    echo "usage: cat-yaml-as-json <file.yaml>" >&2
+    exit 64
+fi
+if [ ! -f "$INPUT" ]; then
+    echo "input file does not exist: $INPUT" >&2
+    exit 66
+fi
+
+exec /app/.venv/bin/python3 -c '
+import json, sys, yaml
+with open(sys.argv[1]) as f:
+    sys.stdout.write(json.dumps(yaml.safe_load(f)))
+' "$INPUT"

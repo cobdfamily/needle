@@ -9,7 +9,6 @@ surfaces at container-start.
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
@@ -18,19 +17,19 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG = REPO_ROOT / "config" / "tools.yaml"
-CATEGORIES_JSON = REPO_ROOT / "config" / "categories.json"
+CATEGORIES_YAML = REPO_ROOT / "config" / "categories.yaml"
 
 
 def _load_catalog():
-    return json.loads(CATEGORIES_JSON.read_text())
+    return yaml.safe_load(CATEGORIES_YAML.read_text())
 
 
-# Categories are sourced from config/categories.json (the
+# Categories are sourced from config/categories.yaml (the
 # canonical catalog). The lists below are derived at import
-# time so adding a category to the JSON automatically
-# propagates here -- the YAML enum + per-category match
-# endpoints are then verified against the catalog by tests
-# below, catching drift before it ships.
+# time so adding a category to the YAML automatically
+# propagates here -- the tools.yaml enum + per-category
+# match endpoints are then verified against the catalog
+# by tests below, catching drift before it ships.
 CATEGORIES = [c["slug"] for c in _load_catalog()]
 SHORT_CATEGORIES = {
     c["slug"] for c in _load_catalog() if c["min_count"] is not None
@@ -354,7 +353,7 @@ def test_admin_endpoints_present(endpoints):
 def test_admin_endpoints_validate_category_as_enum(endpoints):
     """Every category-taking admin endpoint constrains
     ``category`` to the catalog's slug list. Adding a new
-    category means editing categories.json + extending these
+    category means editing categories.yaml + extending these
     enums in lockstep with the match endpoints; this test
     catches drift."""
     for e in endpoints:
@@ -484,7 +483,7 @@ def test_admin_list_regex_yields_one_per_track(endpoints):
 
 
 # ---------------------------------------------------------------------------
-# categories.json -- the canonical catalog
+# categories.yaml -- the canonical catalog
 # ---------------------------------------------------------------------------
 
 
@@ -494,7 +493,7 @@ def catalog():
 
 
 def test_catalog_parses(catalog):
-    """categories.json must be a list of objects with the
+    """categories.yaml must be a list of objects with the
     documented shape. Anything else and the wrapper / loader
     fails at request time rather than CI."""
     assert isinstance(catalog, list)
@@ -625,9 +624,13 @@ def test_admin_categories_returns_native_json(endpoints):
 
 
 def test_admin_categories_reads_catalog_file(endpoints):
-    """The endpoint must `cat` the same file the test loads --
-    drift here means /admin/categories advertises slugs the
-    YAML doesn't have endpoints for, or vice versa."""
+    """The endpoint runs cat-yaml-as-json on the YAML
+    catalog -- drift between the served file and the file
+    the test loads means /admin/categories advertises
+    slugs the YAML doesn't have endpoints for, or vice
+    versa. Also pins the wrapper path so a stray refactor
+    that switches back to /bin/cat (which would emit raw
+    YAML and break native_json parsing) fails fast."""
     e = next(e for e in endpoints if e["name"] == "admin-categories")
-    assert e["command"]["executable"] == "/bin/cat"
-    assert e["command"]["args"] == ["/app/config/categories.json"]
+    assert e["command"]["executable"] == "/app/bin/cat-yaml-as-json"
+    assert e["command"]["args"] == ["/app/config/categories.yaml"]

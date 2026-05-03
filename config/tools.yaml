@@ -23,11 +23,12 @@
 # still triggers a hit.
 #
 # The list of valid categories + per-category tuning lives in
-# config/categories.json (the canonical catalog). This YAML's
+# config/categories.yaml (the canonical catalog). This file's
 # admin enum lists and per-category tuning are checked against
-# the catalog by tests/test_config.py — drift between the JSON
-# and the YAML fails CI before merge. /admin/categories serves
-# the catalog directly for client-side discovery.
+# the catalog by tests/test_config.py — drift fails CI before
+# merge. /admin/categories serves the catalog (converted to
+# JSON on the wire by bin/cat-yaml-as-json) so consumers can
+# discover valid slugs without reading the README.
 
 api:
   title: needle
@@ -487,13 +488,13 @@ endpoints:
       as the route prefix on /<category>/identify and
       /<category>/timestamps.
     command:
-      # `cat`-ing the JSON catalog is the simplest path to a
-      # GET endpoint that returns a static JSON document --
-      # url2code's native_json mode parses stdout and puts the
-      # result in `parsed_output` on the response.
-      executable: /bin/cat
+      # The catalog is authored as YAML (config/categories.yaml)
+      # so operators can edit with comments. cat-yaml-as-json
+      # converts to a JSON document on stdout; url2code's
+      # native_json mode then parses it into `parsed_output`.
+      executable: /app/bin/cat-yaml-as-json
       args:
-        - "/app/config/categories.json"
+        - "/app/config/categories.yaml"
       timeout_seconds: 5
     output:
       mode: native_json

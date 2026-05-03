@@ -231,20 +231,18 @@ docker compose up -d --no-deps needle
 
 Two-step edit:
 
-1. **Add the slug to `config/categories.json`.** Each
+1. **Add the slug to `config/categories.yaml`.** Each
    entry is `{slug, name, description, library_density,
    fine_density, min_count}`. The catalog is the canonical
    source of truth and is served at `/admin/categories`.
 
-   ```json
-   {
-     "slug": "podcasts",
-     "name": "Podcasts",
-     "description": "Long-form podcast audio.",
-     "library_density": 20,
-     "fine_density": 40,
-     "min_count": null
-   }
+   ```yaml
+   - slug: podcasts
+     name: Podcasts
+     description: Long-form podcast audio.
+     library_density: 20
+     fine_density: 40
+     min_count: null
    ```
 
 2. **Add the matching endpoints + admin enum entries to
@@ -260,7 +258,7 @@ CI fails fast if (1) and (2) drift -- `test_config.py`
 asserts the YAML enum lists, per-category match endpoints,
 and `-N` overrides all match the catalog. Retuning an
 existing category (changing densities or `min_count`) is
-a `categories.json` edit alone.
+a `categories.yaml` edit alone.
 
 Then rebuild the image.
 
