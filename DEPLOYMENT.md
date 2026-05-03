@@ -142,7 +142,7 @@ to ``<temp_dir>/<id>.<ext>``, so audfprint stores
 ``/tmp/needle/uploads/admin-library-add/<id>.<ext>`` as
 the entry name. ``/identify`` then returns ``matched``
 with that path; the trailing component is your id.
-(This relies on `url2code >= 1.0.5`, which added
+(This relies on `url2code >= 1.0.6`, which added
 ``uploads[*].name_template`` for exactly this case.)
 
 ### Out-of-band: audfprint directly
