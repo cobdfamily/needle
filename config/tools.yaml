@@ -21,6 +21,13 @@
 # Categories with shorter expected content (shorts, reels)
 # use a smaller min-count threshold (-N) so a 5-10s query
 # still triggers a hit.
+#
+# The list of valid categories + per-category tuning lives in
+# config/categories.json (the canonical catalog). This YAML's
+# admin enum lists and per-category tuning are checked against
+# the catalog by tests/test_config.py — drift between the JSON
+# and the YAML fails CI before merge. /admin/categories serves
+# the catalog directly for client-side discovery.
 
 api:
   title: needle
@@ -468,6 +475,28 @@ endpoints:
       # See admin-library-add — audfprint new logs through Python
       # logging (stderr); stdout is empty even on success.
       mode: text
+
+  - name: admin-categories
+    route: /admin/categories
+    method: GET
+    description: >-
+      Return the curated catalog of categories this deployment
+      knows about. Each entry is a {slug, name, description,
+      library_density, fine_density, min_count} object. Use the
+      `slug` field as the `category` form param on /admin/* and
+      as the route prefix on /<category>/identify and
+      /<category>/timestamps.
+    command:
+      # `cat`-ing the JSON catalog is the simplest path to a
+      # GET endpoint that returns a static JSON document --
+      # url2code's native_json mode parses stdout and puts the
+      # result in `parsed_output` on the response.
+      executable: /bin/cat
+      args:
+        - "/app/config/categories.json"
+      timeout_seconds: 5
+    output:
+      mode: native_json
 
   - name: admin-library-list
     route: /admin/library/list

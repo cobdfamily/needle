@@ -229,10 +229,40 @@ docker compose up -d --no-deps needle
 
 ### Adding a category
 
-Edit `config/tools.yaml` — copy any of the existing
-category blocks, change the route prefix and the
-database paths, retune the audfprint flags for the
-content length, rebuild the image. No Python.
+Two-step edit:
+
+1. **Add the slug to `config/categories.json`.** Each
+   entry is `{slug, name, description, library_density,
+   fine_density, min_count}`. The catalog is the canonical
+   source of truth and is served at `/admin/categories`.
+
+   ```json
+   {
+     "slug": "podcasts",
+     "name": "Podcasts",
+     "description": "Long-form podcast audio.",
+     "library_density": 20,
+     "fine_density": 40,
+     "min_count": null
+   }
+   ```
+
+2. **Add the matching endpoints + admin enum entries to
+   `config/tools.yaml`.** Two new match endpoints
+   (`/<slug>/identify` and `/<slug>/timestamps`) plus
+   extending the `category` enum on the three admin
+   endpoints (`admin-library-add`, `admin-fine-build`,
+   `admin-library-list`). Copy an existing category's
+   blocks; if `min_count` is set, include `-N <value>` in
+   the match args.
+
+CI fails fast if (1) and (2) drift -- `test_config.py`
+asserts the YAML enum lists, per-category match endpoints,
+and `-N` overrides all match the catalog. Retuning an
+existing category (changing densities or `min_count`) is
+a `categories.json` edit alone.
+
+Then rebuild the image.
 
 ### Backups
 

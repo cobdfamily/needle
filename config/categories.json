@@ -1,0 +1,42 @@
+[
+  {
+    "slug": "films",
+    "name": "Films",
+    "description": "Long-form cinema audio (~90-180 min). Library density 20, fine density 40 -- audfprint defaults.",
+    "library_density": 20,
+    "fine_density": 40,
+    "min_count": null
+  },
+  {
+    "slug": "tvshows",
+    "name": "TV episodes",
+    "description": "Episodic series audio (~22-60 min). Same tuning as films.",
+    "library_density": 20,
+    "fine_density": 40,
+    "min_count": null
+  },
+  {
+    "slug": "youtube",
+    "name": "YouTube videos",
+    "description": "Long-form YouTube audio (no length cap). Same tuning as films.",
+    "library_density": 20,
+    "fine_density": 40,
+    "min_count": null
+  },
+  {
+    "slug": "shorts",
+    "name": "YouTube Shorts",
+    "description": "~60s reference clips. min_count=3 lets a 5-10s query trigger a hit; the audfprint default of 5 tends to NOMATCH at this length.",
+    "library_density": 20,
+    "fine_density": 40,
+    "min_count": 3
+  },
+  {
+    "slug": "reels",
+    "name": "Instagram Reels",
+    "description": "Same shape as YouTube Shorts -- short reference clips, lower min_count for sub-clip queries.",
+    "library_density": 20,
+    "fine_density": 40,
+    "min_count": 3
+  }
+]

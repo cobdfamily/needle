@@ -9,6 +9,7 @@ surfaces at container-start.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -17,10 +18,26 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG = REPO_ROOT / "config" / "tools.yaml"
+CATEGORIES_JSON = REPO_ROOT / "config" / "categories.json"
 
-CATEGORIES = ["films", "tvshows", "youtube", "shorts", "reels"]
-SHORT_CATEGORIES = {"shorts", "reels"}
-LONG_CATEGORIES = {"films", "tvshows", "youtube"}
+
+def _load_catalog():
+    return json.loads(CATEGORIES_JSON.read_text())
+
+
+# Categories are sourced from config/categories.json (the
+# canonical catalog). The lists below are derived at import
+# time so adding a category to the JSON automatically
+# propagates here -- the YAML enum + per-category match
+# endpoints are then verified against the catalog by tests
+# below, catching drift before it ships.
+CATEGORIES = [c["slug"] for c in _load_catalog()]
+SHORT_CATEGORIES = {
+    c["slug"] for c in _load_catalog() if c["min_count"] is not None
+}
+LONG_CATEGORIES = {
+    c["slug"] for c in _load_catalog() if c["min_count"] is None
+}
 
 
 @pytest.fixture(scope="module")
@@ -87,12 +104,15 @@ def test_endpoint_names_are_unique(endpoints):
 
 
 def test_every_endpoint_calls_audfprint(endpoints):
-    """Belt-and-braces: every endpoint shells out to audfprint
-    (match for the per-category endpoints, add / new / list for
-    admin). If a future edit accidentally points an endpoint at a
-    different binary, catch it here."""
+    """Belt-and-braces: every audfprint-running endpoint shells
+    out to /app/bin/audfprint (match for the per-category
+    endpoints, add / new / list for admin). admin-categories is
+    the one exception -- it `cat`s the catalog JSON and never
+    touches audfprint."""
     valid_subcommands = {"match", "add", "new", "list"}
     for e in endpoints:
+        if e["name"] == "admin-categories":
+            continue
         assert e["command"]["executable"] == "/app/bin/audfprint"
         assert e["command"]["args"][0] in valid_subcommands, \
             f"{e['name']} uses unexpected subcommand"
@@ -104,10 +124,13 @@ def test_match_endpoints_use_match_subcommand(match_endpoints):
 
 
 def test_every_endpoint_has_dbase_arg(endpoints):
-    """audfprint match requires a -d / --dbase pointer; if
-    we drop it the command exits non-zero with a usage
-    error and url2code returns 502."""
+    """audfprint match / add / new / list all require a -d /
+    --dbase pointer; if we drop it the command exits non-zero
+    with a usage error and url2code returns 502.
+    admin-categories doesn't run audfprint and is exempt."""
     for e in endpoints:
+        if e["name"] == "admin-categories":
+            continue
         args = e["command"]["args"]
         assert "-d" in args, f"{e['name']} missing -d"
         d_idx = args.index("-d")
@@ -143,16 +166,22 @@ def test_timestamps_endpoints_template_id(endpoints):
                 f"{e['name']} must validate `id` request field"
 
 
+# Endpoints that intentionally don't take an audio upload:
+# admin-library-list reads the dbase, admin-categories serves
+# the catalog. Everything else takes audio in multipart field
+# `audio`.
+NO_AUDIO_ENDPOINTS = {"admin-library-list", "admin-categories"}
+
+
 def test_audio_upload_field_is_consistent(endpoints):
     """Every endpoint that takes an audio upload uses the
     multipart field `audio`; clients shouldn't have to remember
-    a different name per endpoint. ``admin-library-list``
-    intentionally has no upload (it's a read of the dbase)."""
+    a different name per endpoint."""
     for e in endpoints:
         uploads = e.get("uploads") or []
         if not uploads:
-            assert e["name"] == "admin-library-list", \
-                f"{e['name']} has no upload but isn't list"
+            assert e["name"] in NO_AUDIO_ENDPOINTS, \
+                f"{e['name']} has no upload but isn't in NO_AUDIO_ENDPOINTS"
             continue
         assert len(uploads) == 1, f"{e['name']} has != 1 upload"
         assert uploads[0]["field_name"] == "audio"
@@ -161,9 +190,10 @@ def test_audio_upload_field_is_consistent(endpoints):
 
 def test_audio_placeholder_is_substituted(endpoints):
     """Every command that takes an audio file substitutes the
-    {audio} placeholder. ``admin-library-list`` doesn't take one."""
+    {audio} placeholder. The no-audio endpoints (catalog
+    listing, library list) don't take one."""
     for e in endpoints:
-        if e["name"] == "admin-library-list":
+        if e["name"] in NO_AUDIO_ENDPOINTS:
             continue
         args = e["command"]["args"]
         assert "{audio}" in args, f"{e['name']} missing {{audio}} arg"
@@ -299,9 +329,18 @@ def test_timestamps_regex_collects_multiple(endpoints):
 
 
 ADMIN_ROUTES = {
-    "admin-library-add": "/admin/library/add",
-    "admin-fine-build":  "/admin/fine/build",
+    "admin-library-add":  "/admin/library/add",
+    "admin-fine-build":   "/admin/fine/build",
     "admin-library-list": "/admin/library/list",
+    "admin-categories":   "/admin/categories",
+}
+
+# Admin endpoints that take a `category` form field. The
+# /admin/categories listing endpoint doesn't (it's the
+# discovery surface for the catalog itself, no form params).
+ADMIN_CATEGORY_ROUTES = {
+    name: route for name, route in ADMIN_ROUTES.items()
+    if name != "admin-categories"
 }
 
 
@@ -313,18 +352,21 @@ def test_admin_endpoints_present(endpoints):
 
 
 def test_admin_endpoints_validate_category_as_enum(endpoints):
-    """Every admin endpoint takes a ``category`` field constrained
-    to the five known categories. Adding a new category means
-    extending these enums in lockstep with the match endpoints."""
+    """Every category-taking admin endpoint constrains
+    ``category`` to the catalog's slug list. Adding a new
+    category means editing categories.json + extending these
+    enums in lockstep with the match endpoints; this test
+    catches drift."""
     for e in endpoints:
-        if not e["route"].startswith("/admin/"):
+        if e["name"] not in ADMIN_CATEGORY_ROUTES:
             continue
         validations = e.get("request", {}).get("validations", {})
         assert "category" in validations, \
             f"{e['name']} missing category validation"
         spec = validations["category"]
         assert spec["type"] == "enum"
-        assert set(spec["choices"]) == set(CATEGORIES)
+        assert set(spec["choices"]) == set(CATEGORIES), \
+            f"{e['name']} enum {sorted(spec['choices'])} != catalog {sorted(CATEGORIES)}"
 
 
 def test_admin_endpoints_use_category_in_dbase_path(endpoints):
@@ -332,7 +374,7 @@ def test_admin_endpoints_use_category_in_dbase_path(endpoints):
     path. Without the ``{category}`` placeholder the wrong
     database gets written."""
     for e in endpoints:
-        if not e["route"].startswith("/admin/"):
+        if e["name"] not in ADMIN_CATEGORY_ROUTES:
             continue
         args = e["command"]["args"]
         d_idx = args.index("-d")
@@ -439,3 +481,153 @@ def test_admin_list_regex_yields_one_per_track(endpoints):
     ]
     # Hash count is captured too so operators can see DB depth.
     assert [m["hashes"] for m in matches] == ["1234", "1500", "980"]
+
+
+# ---------------------------------------------------------------------------
+# categories.json -- the canonical catalog
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def catalog():
+    return _load_catalog()
+
+
+def test_catalog_parses(catalog):
+    """categories.json must be a list of objects with the
+    documented shape. Anything else and the wrapper / loader
+    fails at request time rather than CI."""
+    assert isinstance(catalog, list)
+    assert len(catalog) >= 1
+    required = {"slug", "name", "description",
+                "library_density", "fine_density", "min_count"}
+    for entry in catalog:
+        assert isinstance(entry, dict)
+        assert required <= set(entry.keys()), \
+            f"entry {entry!r} missing keys {required - set(entry.keys())}"
+
+
+def test_catalog_slugs_are_unique(catalog):
+    slugs = [e["slug"] for e in catalog]
+    assert len(slugs) == len(set(slugs)), \
+        f"duplicate slugs: {sorted(slugs)}"
+
+
+def test_catalog_slugs_are_url_safe(catalog):
+    """Slugs become route prefixes (/<slug>/identify) and form
+    field values. Letters, digits, hyphens; not empty; no
+    leading dash."""
+    pattern = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+    for entry in catalog:
+        assert pattern.match(entry["slug"]), \
+            f"slug {entry['slug']!r} is not URL-safe"
+
+
+def test_catalog_densities_are_positive_ints(catalog):
+    for entry in catalog:
+        for key in ("library_density", "fine_density"):
+            v = entry[key]
+            assert isinstance(v, int) and v > 0, \
+                f"{entry['slug']}: {key} = {v!r} (must be a positive int)"
+
+
+def test_catalog_min_count_shape(catalog):
+    """min_count is either a positive int (override of
+    audfprint's default of 5) or null (use the default)."""
+    for entry in catalog:
+        v = entry["min_count"]
+        assert v is None or (isinstance(v, int) and v > 0), \
+            f"{entry['slug']}: min_count = {v!r}"
+
+
+# ---------------------------------------------------------------------------
+# catalog <-> YAML consistency
+# ---------------------------------------------------------------------------
+
+
+def test_match_endpoints_exist_for_every_catalog_slug(endpoints, catalog):
+    """For every {slug} in the catalog, the YAML must declare
+    /<slug>/identify and /<slug>/timestamps. Adding a slug to
+    the catalog without adding the endpoints is precisely the
+    drift this catalog refactor was meant to surface."""
+    routes = {e["route"] for e in endpoints}
+    for entry in catalog:
+        slug = entry["slug"]
+        assert f"/{slug}/identify" in routes, \
+            f"catalog has slug {slug!r} but no /{slug}/identify endpoint"
+        assert f"/{slug}/timestamps" in routes, \
+            f"catalog has slug {slug!r} but no /{slug}/timestamps endpoint"
+
+
+def test_min_count_override_matches_catalog(endpoints, catalog):
+    """Match endpoints' -N values must match the catalog's
+    min_count. Catalog says null -> no -N flag. Catalog says
+    integer -> -N <integer>."""
+    by_slug = {e["slug"]: e for e in catalog}
+    for endpoint in endpoints:
+        if endpoint["name"].startswith("admin-"):
+            continue
+        slug = endpoint["route"].strip("/").split("/")[0]
+        if slug not in by_slug:
+            continue  # lets test_match_endpoints_exist... handle drift
+        expected = by_slug[slug]["min_count"]
+        args = endpoint["command"]["args"]
+        if expected is None:
+            assert "-N" not in args, \
+                f"{endpoint['name']} sets -N but catalog says min_count is null"
+        else:
+            assert "-N" in args, \
+                f"{endpoint['name']} missing -N (catalog wants {expected})"
+            n_idx = args.index("-N")
+            actual = int(args[n_idx + 1])
+            assert actual == expected, \
+                f"{endpoint['name']} -N {actual} != catalog min_count {expected}"
+
+
+def test_admin_density_defaults_match_catalog(endpoints, catalog):
+    """admin-library-add's density default must match the
+    catalog's library_density (homogeneous across the catalog
+    today; if a future entry differs, the default would need
+    to become per-category, but for now they all share)."""
+    library_densities = {e["library_density"] for e in catalog}
+    fine_densities = {e["fine_density"] for e in catalog}
+
+    by_name = {e["name"]: e for e in endpoints}
+    if len(library_densities) == 1:
+        # Single shared default makes sense.
+        d = next(iter(library_densities))
+        assert int(by_name["admin-library-add"]["defaults"]["density"]) == d
+    if len(fine_densities) == 1:
+        d = next(iter(fine_densities))
+        assert int(by_name["admin-fine-build"]["defaults"]["density"]) == d
+
+
+# ---------------------------------------------------------------------------
+# /admin/categories -- discovery endpoint
+# ---------------------------------------------------------------------------
+
+
+def test_admin_categories_endpoint_is_get(endpoints):
+    """Discovery is parameter-less and read-only -- GET is
+    the honest verb. POST is the default in url2code for
+    tool invocations; this is the exception."""
+    e = next(e for e in endpoints if e["name"] == "admin-categories")
+    assert e["method"] == "GET"
+
+
+def test_admin_categories_returns_native_json(endpoints):
+    """/admin/categories `cat`s the catalog and returns its
+    parsed contents as `parsed_output`. text mode would force
+    callers to re-parse; regex_json is wrong for a
+    structured array."""
+    e = next(e for e in endpoints if e["name"] == "admin-categories")
+    assert e["output"]["mode"] == "native_json"
+
+
+def test_admin_categories_reads_catalog_file(endpoints):
+    """The endpoint must `cat` the same file the test loads --
+    drift here means /admin/categories advertises slugs the
+    YAML doesn't have endpoints for, or vice versa."""
+    e = next(e for e in endpoints if e["name"] == "admin-categories")
+    assert e["command"]["executable"] == "/bin/cat"
+    assert e["command"]["args"] == ["/app/config/categories.json"]

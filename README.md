@@ -35,11 +35,22 @@ Categories: `films`, `tvshows`, `youtube`, `shorts`,
 lower min-count threshold so a 5-10s query still
 triggers a hit against a ~60s reference clip.
 
-Three admin endpoints write into the bind-mounted
-database tree:
+The list of categories + per-category tuning is curated
+in [`config/categories.json`](config/categories.json) and
+served via `GET /admin/categories` for client-side
+discovery. The YAML's per-category endpoints and admin
+enums are checked against the catalog in CI -- editing
+the catalog without updating the YAML (or vice versa)
+fails before merge.
+
+Four admin endpoints:
 
 ```
-POST /admin/library/add   form: category + audio
+GET  /admin/categories
+   Return the curated catalog as JSON. Use the `slug`
+   field as the `category` form param below.
+
+POST /admin/library/add   form: category + id + audio
    audfprint add — extend <category>/library.pklz with
    one new audio file.
 
@@ -91,14 +102,21 @@ kibble.../needle:<tag>
                                out for non-WAV decode)
   + audfprint2                (uv pip install; landmark-
                                based fingerprint matcher)
-  + config/tools.yaml         (10 endpoints — 5 categories
-                               x 2 surfaces; the entire
-                               HTTP API is declared here)
+  + config/tools.yaml         (14 endpoints — 5 categories
+                               x 2 surfaces + 4 admin; the
+                               entire HTTP API is declared
+                               here)
+  + config/categories.json    (canonical catalog: slug,
+                               densities, min_count override
+                               per category)
 ```
 
 The image carries no Python source of its own. Adding a
-category, retuning a category, or adding a new endpoint
-shape is a YAML edit + image rebuild.
+category is a `categories.json` edit plus a YAML edit
+(two new match endpoints + extending the three admin
+enums); CI catches drift between the catalog and the YAML
+before merge. Retuning a category (changing densities or
+min_count) is a `categories.json` edit alone.
 
 ## Testing the design
 

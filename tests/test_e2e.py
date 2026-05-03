@@ -96,6 +96,36 @@ def test_liveness_returns_needle_service():
 
 
 # ---------------------------------------------------------------------------
+# /admin/categories — discovery
+# ---------------------------------------------------------------------------
+
+
+def test_admin_categories_returns_curated_catalog():
+    """GET /admin/categories returns the catalog as
+    parsed_output: a list of {slug, name, description,
+    library_density, fine_density, min_count} entries.
+    Without it consumers can't discover valid category
+    slugs without reading the docs."""
+    r = requests.get(NEEDLE_BASE_URL + "/admin/categories", timeout=5)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    catalog = body.get("parsed_output")
+    assert isinstance(catalog, list)
+    assert len(catalog) >= 1
+    for entry in catalog:
+        assert {
+            "slug", "name", "description",
+            "library_density", "fine_density", "min_count",
+        } <= set(entry.keys())
+    # The slug used by the rest of these tests must be in
+    # the catalog (films is the seed entry; if a future
+    # refactor renames it, both this test and the rest of
+    # the suite need updating in lockstep).
+    slugs = [e["slug"] for e in catalog]
+    assert "films" in slugs
+
+
+# ---------------------------------------------------------------------------
 # admin pipeline — populate the dbase tree from scratch
 # ---------------------------------------------------------------------------
 
