@@ -32,7 +32,11 @@
 
 api:
   title: needle
-  default_root: /
+  # API surface lives under /v1/. Liveness ``/`` and the
+  # OpenAPI docs ``/docs`` / ``/redocs`` stay at the root.
+  # Future breaking changes ship at /v2/ without disturbing
+  # existing v1 clients.
+  default_root: /v1
 
 logging:
   level: INFO

@@ -72,7 +72,9 @@ def test_yaml_parses(cfg):
 
 def test_top_level_metadata(cfg):
     assert cfg["api"]["title"] == "needle"
-    assert cfg["api"]["default_root"] == "/"
+    # The API surface lives under /v1/. Liveness ``/`` and
+    # FastAPI's ``/docs`` stay at the root regardless.
+    assert cfg["api"]["default_root"] == "/v1"
     assert cfg["logging"]["level"] in {"DEBUG", "INFO", "WARNING", "ERROR"}
 
 

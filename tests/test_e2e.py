@@ -106,7 +106,7 @@ def test_admin_categories_returns_curated_catalog():
     library_density, fine_density, min_count} entries.
     Without it consumers can't discover valid category
     slugs without reading the docs."""
-    r = requests.get(NEEDLE_BASE_URL + "/admin/categories", timeout=5)
+    r = requests.get(NEEDLE_BASE_URL + "/v1/admin/categories", timeout=5)
     assert r.status_code == 200, r.text
     body = r.json()
     catalog = body.get("parsed_output")
@@ -140,7 +140,7 @@ def test_admin_fine_build_creates_per_file_pklz(query_audio, film_id):
     downstream."""
     with open(query_audio, "rb") as f:
         r = requests.post(
-            NEEDLE_BASE_URL + "/admin/fine/build",
+            NEEDLE_BASE_URL + "/v1/admin/fine/build",
             data={"category": "films", "id": film_id},
             files={"audio": ("query.wav", f, "audio/wav")},
             timeout=60,
@@ -160,7 +160,7 @@ def test_admin_library_add_extends_library(query_audio, film_id):
     code here and verify the side effect via /admin/library/list."""
     with open(query_audio, "rb") as f:
         r = requests.post(
-            NEEDLE_BASE_URL + "/admin/library/add",
+            NEEDLE_BASE_URL + "/v1/admin/library/add",
             data={"category": "films", "id": film_id},
             files={"audio": ("query.wav", f, "audio/wav")},
             timeout=60,
@@ -179,7 +179,7 @@ def test_admin_library_list_includes_seeded_entry(film_id):
     /admin/library/list takes no audio upload, so request is a
     plain JSON body rather than multipart."""
     r = requests.post(
-        NEEDLE_BASE_URL + "/admin/library/list",
+        NEEDLE_BASE_URL + "/v1/admin/library/list",
         json={"category": "films"},
         timeout=15,
     )
@@ -203,7 +203,7 @@ def test_films_identify_finds_seeded_entry(query_audio, film_id):
     name_template + library.pklz round-trip working."""
     with open(query_audio, "rb") as f:
         r = requests.post(
-            NEEDLE_BASE_URL + "/films/identify",
+            NEEDLE_BASE_URL + "/v1/films/identify",
             files={"audio": ("query.wav", f, "audio/wav")},
             timeout=60,
         )
@@ -223,7 +223,7 @@ def test_films_timestamps_returns_aligned_range(query_audio, film_id):
     duration close to NOISE_SECONDS."""
     with open(query_audio, "rb") as f:
         r = requests.post(
-            NEEDLE_BASE_URL + "/films/timestamps",
+            NEEDLE_BASE_URL + "/v1/films/timestamps",
             data={"id": film_id},
             files={"audio": ("query.wav", f, "audio/wav")},
             timeout=60,

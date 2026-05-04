@@ -97,7 +97,7 @@ curl -fsS -X POST \
   -F category=films \
   -F id=tt0123456 \
   -F audio=@/sources/films/inception.m4a \
-  https://match.cobd.ca/admin/library/add
+  https://match.cobd.ca/v1/admin/library/add
 
 # Build the fine-grained per-file database for that film:
 curl -fsS -X POST \
@@ -105,13 +105,13 @@ curl -fsS -X POST \
   -F category=films \
   -F id=tt0123456 \
   -F audio=@/sources/films/inception.m4a \
-  https://match.cobd.ca/admin/fine/build
+  https://match.cobd.ca/v1/admin/fine/build
 
 # List what's currently indexed in the films library:
 curl -fsS -X POST \
   -H "X-Api-Key: $NEEDLE_ADMIN_KEY" \
   -F category=films \
-  https://match.cobd.ca/admin/library/list
+  https://match.cobd.ca/v1/admin/library/list
 ```
 
 needle has no built-in auth. The `X-Api-Key` header
@@ -122,7 +122,7 @@ admin endpoints are open to the world. Sample nginx
 snippet:
 
 ```nginx
-location /admin/ {
+location /v1/admin/ {
     if ($http_x_api_key != "$NEEDLE_ADMIN_KEY") {
         return 401;
     }
@@ -204,13 +204,13 @@ curl -fsS https://match.cobd.ca/
 # Identify a clip:
 curl -fsS -X POST \
   -F audio=@/path/to/clip.m4a \
-  https://match.cobd.ca/films/identify | jq
+  https://match.cobd.ca/v1/films/identify | jq
 
 # For a known film id, precise timestamps:
 curl -fsS -X POST \
   -F audio=@/path/to/clip.m4a \
   -F id=tt0123456 \
-  https://match.cobd.ca/films/timestamps | jq
+  https://match.cobd.ca/v1/films/timestamps | jq
 ```
 
 ## Routine operations

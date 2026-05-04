@@ -82,13 +82,13 @@ docker run -d --name needle \
 # Identify a clip against a category's library:
 curl -fsS -X POST \
   -F audio=@/path/to/recording.m4a \
-  http://localhost:8000/films/identify
+  http://localhost:8000/v1/films/identify
 
 # For a known film id, get precise timestamps:
 curl -fsS -X POST \
   -F audio=@/path/to/recording.m4a \
   -F id=tt0123456 \
-  http://localhost:8000/films/timestamps
+  http://localhost:8000/v1/films/timestamps
 ```
 
 ## Architecture
