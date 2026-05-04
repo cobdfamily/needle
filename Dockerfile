@@ -55,8 +55,12 @@ COPY --chown=url2code:url2code config /app/config
 #    fresh data tree don't have to special-case the first call.
 COPY --chown=url2code:url2code bin /app/bin
 USER root
-RUN chmod 0755 /app/bin/audfprint /app/bin/cat-yaml-as-json
+RUN chmod 0755 /app/bin/audfprint
 USER url2code
+
+# bin/cat-yaml-as-json is provided by url2code:>=1.0.7 itself
+# (lives at /app/bin/cat-yaml-as-json in the base layer); this
+# image's bin/ COPY layers on top without clobbering it.
 
 # CMD inherited from the base image
 # (uvicorn url2code.main:app --host 0.0.0.0 --port 8000) is
