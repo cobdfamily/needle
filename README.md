@@ -2,8 +2,7 @@
 
 [![test](https://github.com/cobdfamily/needle/actions/workflows/test.yml/badge.svg)](https://github.com/cobdfamily/needle/actions/workflows/test.yml)
 
-Audio-fingerprint match service. Records of audio in,
-"that's <which file> at <which time>" out.
+A simple audio-fingerprint match API.
 
 This is a YAML-defined microservice — no Python source in
 the repo, only tests. The HTTP surface lives in
