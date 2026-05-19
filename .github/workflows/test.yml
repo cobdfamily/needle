@@ -30,8 +30,8 @@ jobs:
   yaml:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
       - run: python3 -m pip install -r tests/requirements.txt
       - run: python3 -m pytest tests/test_config.py -v
@@ -41,7 +41,7 @@ jobs:
     needs: [yaml]
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: configure docker for plain-HTTP kibble registry
         # needle's Dockerfile pulls cobdfamily/url2code from
