@@ -78,6 +78,26 @@ def test_top_level_metadata(cfg):
     assert cfg["logging"]["level"] in {"DEBUG", "INFO", "WARNING", "ERROR"}
 
 
+def test_no_endpoint_overrides_default_root(endpoints):
+    """Fleet policy across every url2code consumer
+    (needle, outofoffice, brl, pandoc, ...): one
+    api.default_root for the entire surface, no
+    per-endpoint ``root:`` escape hatch.
+
+    url2code's EndpointConfig accepts a ``root:`` field
+    that overrides the api.default_root for a single
+    endpoint; nobody in the fleet uses that, and a
+    future /v2 cutover wants to be a one-line edit in
+    the api block rather than an audit of every
+    endpoint."""
+    for e in endpoints:
+        assert "root" not in e, (
+            f"{e['name']} sets a per-endpoint root override; "
+            "the fleet rule is one default_root for the whole "
+            "surface"
+        )
+
+
 def test_every_category_has_two_endpoints(endpoints):
     """Each declared category must expose both /identify and
     /timestamps. Missing one is a half-shipped category."""
