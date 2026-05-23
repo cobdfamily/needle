@@ -262,7 +262,7 @@ a `categories.yaml` edit alone.
 
 Then rebuild the image.
 
-### Backups
+### Backups and restore
 
 What must persist:
 
@@ -276,3 +276,99 @@ Safe to lose:
 
 - `/tmp/needle/uploads/` — per-request scratch.
 - Container logs (ship to your aggregator).
+
+#### Snapshot strategy
+
+Two things go wrong with fingerprint databases:
+
+1. Bit-rot or partial write -- a single .pklz becomes
+   unreadable. Symptom: that one category's
+   `/identify` (or one file's `/timestamps`) starts
+   502-ing while the rest of the service is healthy.
+2. Operator mistake -- a wrong `/admin/library/add`
+   call extends the wrong category, or a
+   `/admin/fine/build` overwrites the wrong id.
+   Symptom: matches still come back, just for the
+   wrong file.
+
+A weekly snapshot of `/opt/needle/data/` covers both.
+The tree is small (low MB per category for the
+coarse libraries; tens to hundreds of MB per
+high-density fine file), so copying the whole tree is
+fine -- no need for incrementals.
+
+A minimal cron line that snapshots to a
+date-stamped sibling directory and keeps the last
+four:
+
+```sh
+# /etc/cron.d/needle-snapshot
+17 03 * * 0 root \
+  rsync -a --delete /opt/needle/data/ \
+    /opt/needle/snapshots/$(date -u +\%Y\%m\%d)/ \
+  && ls -1d /opt/needle/snapshots/* \
+       | sort -r | tail -n +5 | xargs -r rm -rf
+```
+
+Restore is `rsync` in the other direction with the
+service down:
+
+```sh
+docker compose stop needle
+rsync -a --delete \
+  /opt/needle/snapshots/20260101/ \
+  /opt/needle/data/
+docker compose start needle
+```
+
+#### Integrity check
+
+The image ships `/app/bin/needle-data-check`. It
+walks `/data`, asserts every `.pklz` is non-empty
+and parseable by `audfprint list`, and reports disk
+usage past a configurable threshold. Designed for
+operator cron at low frequency.
+
+Exit codes:
+
+- `0` -- tree healthy
+- `1` -- one or more `.pklz` files unreadable/empty
+- `2` -- `/data` missing or unreadable
+- `3` -- disk usage past `NEEDLE_USAGE_WARN_PERCENT`
+  (default 80)
+
+A minimal cron + Apprise alert pipeline:
+
+```sh
+# /etc/cron.d/needle-data-check
+#
+# Hourly integrity scan. The script's exit codes are
+# designed for cron-pipe -- non-zero == something is
+# off, output is one finding per line.
+13 * * * * root \
+  /usr/bin/docker exec needle /app/bin/needle-data-check \
+    | apprise --config /etc/apprise.yml \
+        --title "needle data-check" \
+        --notify-type failure \
+    || true
+```
+
+Tune the cadence to your operations rhythm. Hourly
+is fine for a small library; nightly is plenty for a
+seeded-once-and-left tree.
+
+#### Verifying a restored snapshot
+
+After restoring from a snapshot, run the data check
+against the restored tree once before bringing the
+service back up:
+
+```sh
+docker run --rm \
+  -v /opt/needle/data:/data:ro \
+  kibble.apps.blindhub.ca/cobdfamily/needle:latest \
+  /app/bin/needle-data-check
+```
+
+A clean `OK: <N> pklz files ...` line is your
+green-light to `docker compose start needle`.
