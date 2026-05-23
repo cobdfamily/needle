@@ -1,0 +1,91 @@
+#!/bin/sh
+# needle-data-check -- integrity + disk-usage check for the
+# fingerprint database tree.
+#
+# Designed for an operator to cron at low frequency (eg.
+# hourly or daily). Exits 0 when the tree looks healthy,
+# non-zero when something is wrong. Output is one finding
+# per line so it's easy to grep / pipe into an alerting
+# transport (Apprise, mailx, your dispatcher of choice).
+#
+# What it checks:
+#
+#   * /data exists and is readable.
+#   * Every */library.pklz (the coarse, multi-file dbase
+#     per category) is non-empty and parseable by audfprint
+#     -- i.e. `audfprint list -d <pklz>` returns rc 0.
+#   * Every */fine/*.pklz is non-empty and parseable the
+#     same way.
+#   * /data disk usage; warns over a configurable
+#     percentage (default 80%).
+#
+# Exit codes:
+#   0  -- tree looks healthy.
+#   1  -- one or more pklz files unreadable or unparseable.
+#   2  -- /data missing or unreadable.
+#   3  -- disk usage past the warning threshold (still
+#         considered a soft failure: the script returns
+#         non-zero so a cron pipeline can alert, but the
+#         operator can ignore until they actually need
+#         to act).
+
+set -eu
+
+DATA_DIR=${NEEDLE_DATA_DIR:-/data}
+AUDFPRINT_BIN=${NEEDLE_AUDFPRINT_BIN:-/app/bin/audfprint}
+USAGE_WARN_PERCENT=${NEEDLE_USAGE_WARN_PERCENT:-80}
+
+# Don't tell the operator we're starting; only emit lines
+# the operator cares about. A clean run produces a single
+# summary at the end.
+problems=0
+
+if [ ! -d "$DATA_DIR" ]; then
+    echo "FAIL: $DATA_DIR does not exist or is not a directory"
+    exit 2
+fi
+if [ ! -r "$DATA_DIR" ]; then
+    echo "FAIL: $DATA_DIR is not readable"
+    exit 2
+fi
+
+# Walk every .pklz and check that audfprint can list it.
+# `audfprint list` is the cheapest non-trivial read: it
+# parses the header without touching the spectrogram data.
+count=0
+for pklz in $(find "$DATA_DIR" -type f -name '*.pklz' 2>/dev/null | sort); do
+    count=$((count + 1))
+    if [ ! -s "$pklz" ]; then
+        echo "FAIL: $pklz is empty"
+        problems=$((problems + 1))
+        continue
+    fi
+    if ! "$AUDFPRINT_BIN" list -d "$pklz" >/dev/null 2>&1; then
+        echo "FAIL: $pklz is unreadable by audfprint list"
+        problems=$((problems + 1))
+    fi
+done
+
+if [ "$count" -eq 0 ]; then
+    echo "WARN: $DATA_DIR contains zero .pklz files"
+    # Empty tree isn't fatal -- a brand-new deploy looks
+    # like this -- but the operator should know.
+fi
+
+# Disk usage of /data. df output varies by platform; the
+# Linux container is consistent. Strip the trailing '%'.
+used_percent=$(df -P "$DATA_DIR" \
+    | awk 'NR==2 {sub("%","",$5); print $5}')
+if [ -n "${used_percent:-}" ] && [ "$used_percent" -ge "$USAGE_WARN_PERCENT" ]; then
+    echo "WARN: $DATA_DIR is ${used_percent}% full (threshold ${USAGE_WARN_PERCENT}%)"
+    if [ "$problems" -eq 0 ]; then
+        problems=3
+    fi
+fi
+
+if [ "$problems" -eq 0 ]; then
+    echo "OK: $count pklz files in $DATA_DIR, disk ${used_percent:-?}% full"
+    exit 0
+fi
+
+exit "$problems"
