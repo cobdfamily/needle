@@ -68,7 +68,7 @@ def test_empty_tree_warns_and_returns_3(tmp_path):
     rc, out, _ = _run({
         "NEEDLE_DATA_DIR": str(tmp_path),
         "NEEDLE_AUDFPRINT_BIN": str(fake),
-        "NEEDLE_USAGE_WARN_PERCENT": "100",
+        "NEEDLE_USAGE_WARN_PERCENT": "999",
     })
     # Empty tree alone is a soft signal -- the script logs WARN
     # but reaches the OK summary because no pklz files failed.
@@ -88,7 +88,7 @@ def test_healthy_tree_returns_0(tmp_path):
     rc, out, _ = _run({
         "NEEDLE_DATA_DIR": str(data),
         "NEEDLE_AUDFPRINT_BIN": str(fake),
-        "NEEDLE_USAGE_WARN_PERCENT": "100",
+        "NEEDLE_USAGE_WARN_PERCENT": "999",
     })
     assert rc == 0
     assert "OK:" in out
@@ -105,7 +105,7 @@ def test_empty_pklz_file_is_flagged(tmp_path):
     rc, out, _ = _run({
         "NEEDLE_DATA_DIR": str(data),
         "NEEDLE_AUDFPRINT_BIN": str(fake),
-        "NEEDLE_USAGE_WARN_PERCENT": "100",
+        "NEEDLE_USAGE_WARN_PERCENT": "999",
     })
     assert rc == 1
     assert "is empty" in out
@@ -121,7 +121,7 @@ def test_unparseable_pklz_is_flagged(tmp_path):
     rc, out, _ = _run({
         "NEEDLE_DATA_DIR": str(data),
         "NEEDLE_AUDFPRINT_BIN": str(fake),
-        "NEEDLE_USAGE_WARN_PERCENT": "100",
+        "NEEDLE_USAGE_WARN_PERCENT": "999",
     })
     assert rc == 1
     assert "unreadable by audfprint" in out
