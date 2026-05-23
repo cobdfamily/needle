@@ -10,6 +10,27 @@ empty and is filled forward from this point.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-22
+
+### Fixed
+- `GET /` liveness now reports `version: "0.2.1"`
+  (or whatever needle's current tag is) instead of
+  inheriting url2code's hardcoded engine version
+  (`"1.0.7"`). The fix lives upstream in url2code
+  v1.0.8 (ApiConfig.version is now overridable);
+  needle's tools.yaml sets `api.version: "0.2.1"`
+  to take advantage of it.
+- Dockerfile now pins `URL2CODE_TAG=1.0.8` as the
+  default base image. Previous releases used
+  `latest`, which made build outputs depend on
+  whatever url2code happened to be tagged latest
+  at build time.
+
+### Notes
+- No tests added in this patch; the version
+  override is covered upstream in url2code's
+  test_executor.py.
+
 ## [0.2.0] - 2026-05-22
 
 Robustness sprint -- no new features, every change

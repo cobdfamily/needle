@@ -32,6 +32,13 @@
 
 api:
   title: needle
+  # ``version`` surfaces on GET / so operators can tell
+  # which needle build is up by hitting the liveness URL.
+  # Bump in lockstep with the git tag + container tag. When
+  # unset, url2code falls back to its own engine version,
+  # which is misleading on a downstream image -- always
+  # set this here.
+  version: "0.2.1"
   # API surface lives under /v1/. Liveness ``/`` and the
   # OpenAPI docs ``/docs`` / ``/redocs`` stay at the root.
   # Future breaking changes ship at /v2/ without disturbing
