@@ -10,6 +10,8 @@ coverage.xml
 
 # Tests scratch
 tests/.venv/
+# Root-level venv for the static-test bootstrap.
+.venv/
 
 # Editor / OS
 .DS_Store
