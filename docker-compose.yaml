@@ -30,6 +30,25 @@ services:
       retries: 12
       start_period: 5s
     restart: unless-stopped
+    # Container hardening, same shape as lwe v0.9.0:
+    #
+    # * read_only locks the root filesystem so code execution
+    #   inside the container can't persist by dropping files.
+    #   /tmp is tmpfs because url2code writes uploads under
+    #   /tmp/needle/uploads/<endpoint>/ during every request.
+    # * /data stays its own bind / named volume (declared above),
+    #   :rw because the /admin/* endpoints write the .pklz files
+    #   into the tree.
+    # * cap_drop ALL -- needle needs no Linux capabilities. It
+    #   doesn't bind privileged ports or fiddle with networking.
+    # * no-new-privileges blocks setuid binaries from elevating.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
   needle-data:
