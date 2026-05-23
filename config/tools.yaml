@@ -56,6 +56,11 @@ endpoints:
       /data/films/library.pklz.
     command:
       executable: /app/bin/audfprint
+      # 30s is roomy for an audfprint match against the
+      # coarse library on a clip of typical length; quick
+      # enough that a wedged worker recovers inside a
+      # request-pool slot. Pinned by test_endpoint_timeouts.
+      timeout_seconds: 30
       args:
         - "match"
         - "-d"
@@ -88,6 +93,12 @@ endpoints:
       /data/films/fine/<id>.pklz; up to 5 matches per query.
     command:
       executable: /app/bin/audfprint
+      # /timestamps runs against a single high-density
+      # per-file dbase and is allowed up to -x 5 matches,
+      # so it's measurably slower than /identify. 60s is
+      # comfortable on full-film clips; still inside a
+      # human request budget.
+      timeout_seconds: 60
       args:
         - "match"
         - "-d"
@@ -124,6 +135,7 @@ endpoints:
       Identify which tv-episode the uploaded audio comes from.
     command:
       executable: /app/bin/audfprint
+      timeout_seconds: 30
       args:
         - "match"
         - "-d"
@@ -151,6 +163,7 @@ endpoints:
       For a known tv-episode id, return precise time ranges.
     command:
       executable: /app/bin/audfprint
+      timeout_seconds: 60
       args:
         - "match"
         - "-d"
@@ -187,6 +200,7 @@ endpoints:
       Identify which YouTube video the uploaded audio comes from.
     command:
       executable: /app/bin/audfprint
+      timeout_seconds: 30
       args:
         - "match"
         - "-d"
@@ -214,6 +228,7 @@ endpoints:
       For a known YouTube video id, return precise time ranges.
     command:
       executable: /app/bin/audfprint
+      timeout_seconds: 60
       args:
         - "match"
         - "-d"
@@ -252,6 +267,7 @@ endpoints:
       still triggers a hit against a short reference.
     command:
       executable: /app/bin/audfprint
+      timeout_seconds: 30
       args:
         - "match"
         - "-d"
@@ -281,6 +297,7 @@ endpoints:
       For a known YouTube Short id, return precise time ranges.
     command:
       executable: /app/bin/audfprint
+      timeout_seconds: 60
       args:
         - "match"
         - "-d"
@@ -320,6 +337,7 @@ endpoints:
       Same tuning as shorts: lower -N for ~60s reference clips.
     command:
       executable: /app/bin/audfprint
+      timeout_seconds: 30
       args:
         - "match"
         - "-d"
@@ -349,6 +367,7 @@ endpoints:
       For a known Instagram Reel id, return precise time ranges.
     command:
       executable: /app/bin/audfprint
+      timeout_seconds: 60
       args:
         - "match"
         - "-d"
@@ -406,6 +425,13 @@ endpoints:
       density: "20"
     command:
       executable: /app/bin/audfprint
+      # ``audfprint add`` rebuilds the entire library.pklz
+      # in memory each call -- linearly proportional to
+      # existing library size + the new file. 120s is
+      # comfortable on a library of a few hundred entries.
+      # Operators with much larger libraries should override
+      # this via the same field.
+      timeout_seconds: 120
       args:
         - "add"
         - "-d"
@@ -451,6 +477,13 @@ endpoints:
       density: "40"
     command:
       executable: /app/bin/audfprint
+      # ``audfprint new`` against a feature-length film at
+      # density 40 takes the longest of any endpoint --
+      # easily a couple of minutes on slower hardware. 300s
+      # is the upper bound we'll tolerate before refusing;
+      # an operator who needs more should be reindexing
+      # offline, not through the HTTP surface.
+      timeout_seconds: 300
       args:
         - "new"
         - "-d"
@@ -513,6 +546,10 @@ endpoints:
       canonical ids (the upload was saved as ``<id>.<ext>``).
     command:
       executable: /app/bin/audfprint
+      # Just reads the dbase header; never touches audio.
+      # 10s is plenty even on the biggest libraries we
+      # plan to host.
+      timeout_seconds: 10
       args:
         - "list"
         - "-d"

@@ -100,6 +100,70 @@ def test_endpoint_names_are_unique(endpoints):
 
 
 # ---------------------------------------------------------------------------
+# per-endpoint timeouts (NEEDLE2)
+# ---------------------------------------------------------------------------
+
+# Sensible bounds per endpoint shape. url2code defaults to 30s
+# when ``command.timeout_seconds`` is missing, which is too tight
+# for /admin/fine/build on a full-length film and too loose for
+# the catalog-read /admin/categories. Every endpoint now pins an
+# explicit value; this test holds the bounds.
+EXPECTED_TIMEOUT_BOUNDS = {
+    # /identify: coarse-library match, short clip in / short
+    # answer out. 30s is roomy.
+    "identify": (20, 60),
+    # /timestamps: per-file fine match, up to -x 5 hits;
+    # measurably slower than identify.
+    "timestamps": (45, 120),
+    # admin: rebuilds / writes the dbase. Wide bounds because
+    # the right value depends on library size and audio length.
+    "admin-library-add":  (60, 240),
+    "admin-fine-build":   (180, 600),
+    "admin-library-list": (5, 30),
+    "admin-categories":   (1, 15),
+}
+
+
+def _endpoint_shape(endpoint: dict) -> str:
+    """Bucket an endpoint into one of the EXPECTED_TIMEOUT_BOUNDS
+    keys. Per-category /<cat>/identify and /<cat>/timestamps
+    share bounds across categories."""
+    name = endpoint["name"]
+    if name.endswith("-identify"):
+        return "identify"
+    if name.endswith("-timestamps"):
+        return "timestamps"
+    return name  # admin endpoints are keyed by full name
+
+
+def test_every_endpoint_pins_a_timeout(endpoints):
+    """The default command.timeout_seconds (30s) is fine for
+    /identify but wrong for the long-running admin writes and
+    the short catalog read. Every endpoint must set an explicit
+    value so the choice is auditable in the YAML."""
+    for e in endpoints:
+        assert "timeout_seconds" in e["command"], \
+            f"{e['name']} must set command.timeout_seconds"
+
+
+def test_timeouts_are_within_sensible_bounds(endpoints):
+    """The pinned values must fall inside the bounds for the
+    endpoint shape (above). Tightening a timeout below the
+    floor risks falsely 504-ing legit calls; loosening above
+    the ceiling lets a wedged worker hold a slot too long."""
+    for e in endpoints:
+        shape = _endpoint_shape(e)
+        if shape not in EXPECTED_TIMEOUT_BOUNDS:
+            raise AssertionError(
+                f"{e['name']}: no timeout bounds known for shape {shape!r}"
+            )
+        lo, hi = EXPECTED_TIMEOUT_BOUNDS[shape]
+        t = e["command"]["timeout_seconds"]
+        assert lo <= t <= hi, \
+            f"{e['name']}: timeout {t}s outside {lo}-{hi}s bounds"
+
+
+# ---------------------------------------------------------------------------
 # command shape
 # ---------------------------------------------------------------------------
 
