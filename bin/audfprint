@@ -1,5 +1,5 @@
 #!/bin/sh
-# Thin wrapper around the real audfprint that handles two
+# Thin wrapper around the real audfprint that handles three
 # audfprint quirks that bite a YAML-defined HTTP wrapper:
 #
 # 1. audfprint logs match results / "Saved fprints..." status
@@ -14,8 +14,21 @@
 #    seeding a fresh data tree shouldn't have to know that — this
 #    wrapper transparently flips ``add`` to ``new`` if the dbase
 #    file isn't there. Subsequent ``add`` calls extend it normally.
+#
+# 3. NEEDLE3 hardening: refuse to run if -d / --dbase points
+#    anywhere outside /data/. The YAML templates substitute
+#    {category} and {id} into the dbase path; url2code's
+#    name_template guard validates the upload's saved filename
+#    but does NOT regex-check the request field as it appears in
+#    command args. A malicious id like ``../../../etc/passwd``
+#    would resolve under /data/... but could read existence of
+#    out-of-tree files. Wrapper refuses non-/data paths so the
+#    failure mode is a clean 502 with an obvious log line, not
+#    a partial read.
 
-set -e
+# set -e by itself misses pipeline failures and unset-var typos.
+# -u catches typoed positionals; -e exits on first failure.
+set -eu
 AUDFPRINT="/app/.venv/bin/audfprint"
 
 if [ "$#" -eq 0 ]; then
@@ -25,18 +38,49 @@ fi
 SUB="$1"
 shift
 
+# Walk the args once to find the dbase path. We use it for two
+# purposes: (a) the new-on-empty-dbase swap below for ``add``,
+# (b) the path-safety guard. Read-only on $@; positional order
+# is preserved for the final exec.
+DBASE=""
+prev=""
+for a in "$@"; do
+    case "$prev" in
+        -d|--dbase) DBASE="$a"; break ;;
+    esac
+    prev="$a"
+done
+
+# Path-safety guard: only allow dbase paths inside /data/ ending
+# in .pklz. Any other shape -- absolute path outside /data, or
+# a relative path that could resolve to something surprising --
+# is refused outright. We don't try to normalize the path here;
+# audfprint will fail on a non-existent file regardless. The
+# guard is about REFUSING audfprint from ever opening a file
+# outside the data tree, even for a "file not found" oracle.
+if [ -n "$DBASE" ]; then
+    case "$DBASE" in
+        /data/*.pklz) : ;;
+        *)
+            echo "audfprint wrapper: refusing dbase $DBASE -- must be inside /data/ and end in .pklz" 1>&2
+            exit 2
+            ;;
+    esac
+    # Refuse any path traversal even within /data/, eg.
+    # /data/films/../../etc/x.pklz. Linux's open(2) would resolve
+    # it; the wrapper would rather not.
+    case "$DBASE" in
+        */../*|*/..)
+            echo "audfprint wrapper: refusing dbase $DBASE -- contains .. segment" 1>&2
+            exit 2
+            ;;
+    esac
+fi
+
 if [ "$SUB" = "add" ]; then
-    # The dbase path is the value of -d / --dbase. Walk the args
-    # looking for it, but don't disturb the order — ``audfprint``
-    # is order-sensitive only between subcommand and rest.
-    DBASE=""
-    prev=""
-    for a in "$@"; do
-        case "$prev" in
-            -d|--dbase) DBASE="$a"; break ;;
-        esac
-        prev="$a"
-    done
+    # add-on-missing-dbase is upstream audfprint's behaviour;
+    # transparently flipping to ``new`` lets operators seed a
+    # fresh tree without special-casing the first call.
     if [ -n "$DBASE" ] && [ ! -f "$DBASE" ]; then
         SUB="new"
     fi
