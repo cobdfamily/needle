@@ -10,6 +10,8 @@ empty and is filled forward from this point.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-01
+
 ### Changed
 - Base image `1.0.8 -> 2.1.0`, closing the base-pin drift that left
   needle on the Sprint-1 engine. Picks up the async executor (2.0.0),
@@ -17,8 +19,9 @@ empty and is filled forward from this point.
   (1.3.0), the readiness probe + graceful drain (1.4.0), `/metrics`
   (1.5.0), and OTel tracing (1.6.0). 2.0.0 is a breaking engine
   release (subprocess timeout/cancellation edge-cases may shift) —
-  needle's per-endpoint timeouts make this worth certifying against
-  the e2e suite before tagging.
+  needle's per-endpoint timeouts were certified against the e2e
+  suite (CI).
+- `api.version` `0.3.0 -> 0.3.1`.
 
 ## [0.3.0] - 2026-06-01
 

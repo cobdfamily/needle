@@ -38,7 +38,7 @@ api:
   # unset, url2code falls back to its own engine version,
   # which is misleading on a downstream image -- always
   # set this here.
-  version: "0.3.0"
+  version: "0.3.1"
   # API surface lives under /v1/. Liveness ``/`` and the
   # OpenAPI docs ``/docs`` / ``/redocs`` stay at the root.
   # Future breaking changes ship at /v2/ without disturbing
