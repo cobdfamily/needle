@@ -7,7 +7,7 @@
 # Operators bind-mount the fingerprint database tree at /data
 # (per-category .pklz files); see DEPLOYMENT.md.
 
-ARG URL2CODE_TAG=1.0.8
+ARG URL2CODE_TAG=2.1.0
 FROM kibble.apps.blindhub.ca/cobdfamily/url2code:${URL2CODE_TAG}
 
 USER root
