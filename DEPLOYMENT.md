@@ -297,12 +297,30 @@ coarse libraries; tens to hundreds of MB per
 high-density fine file), so copying the whole tree is
 fine -- no need for incrementals.
 
-A minimal cron line that snapshots to a
-date-stamped sibling directory and keeps the last
-four:
+Since 0.3.0 the image ships **`/app/bin/needle-snapshot`**,
+which does the date-stamping, the copy, and the
+keep-the-last-N pruning for you (configurable via
+`NEEDLE_SNAPSHOT_DIR` / `NEEDLE_SNAPSHOT_KEEP`). Run it on a
+schedule with a one-line cron that execs it in the running
+container:
 
 ```sh
-# /etc/cron.d/needle-snapshot
+# /etc/cron.d/needle-snapshot — weekly, Sundays 03:17 UTC.
+17 03 * * 0 root \
+  cd /opt/needle && docker compose exec -T needle /app/bin/needle-snapshot
+```
+
+By default it writes to `/data/snapshots/<UTC-timestamp>/`
+inside the data volume (survives restarts, guards against
+operator mistakes) and keeps the last 4. To protect against
+loss of the whole volume, set `NEEDLE_SNAPSHOT_DIR` to a
+separate mount.
+
+If you'd rather snapshot host-side without execing into the
+container, the equivalent raw `rsync` is still fine:
+
+```sh
+# /etc/cron.d/needle-snapshot (host-side variant)
 17 03 * * 0 root \
   rsync -a --delete /opt/needle/data/ \
     /opt/needle/snapshots/$(date -u +\%Y\%m\%d)/ \

@@ -1,0 +1,68 @@
+#!/bin/sh
+# Point-in-time snapshot of needle's fingerprint-database tree.
+#
+# Covers the two failure modes in DEPLOYMENT.md's "Snapshot
+# strategy": a bit-rotted / partially-written .pklz, and an
+# operator mistake (a wrong /admin/* call clobbering a category
+# or file). Copies the whole data tree to a date-stamped snapshot
+# dir and prunes old ones, so the documented weekly snapshot is a
+# shipped command instead of a hand-written rsync line.
+#
+# Runs INSIDE the container. The slim image has no rsync, so this
+# uses `cp -a` (coreutils). Invoke it on a schedule from the host,
+# e.g. weekly on Sundays at 03:17 UTC keeping the last 4:
+#
+#   17 3 * * 0 root docker compose exec -T needle /app/bin/needle-snapshot
+#
+# Env (all optional):
+#   NEEDLE_DATA_DIR       source tree            (default /data)
+#   NEEDLE_SNAPSHOT_DIR   snapshot root          (default
+#                         $NEEDLE_DATA_DIR/snapshots)
+#   NEEDLE_SNAPSHOT_KEEP  how many to retain     (default 4)
+#
+# Snapshots default to living under /data/snapshots so they ride
+# the same named volume -- surviving container restarts and
+# guarding against operator mistakes. For protection against loss
+# of the whole volume, point NEEDLE_SNAPSHOT_DIR at a separate
+# mount.
+
+set -eu
+
+DATA_DIR="${NEEDLE_DATA_DIR:-/data}"
+SNAP_ROOT="${NEEDLE_SNAPSHOT_DIR:-$DATA_DIR/snapshots}"
+KEEP="${NEEDLE_SNAPSHOT_KEEP:-4}"
+
+if [ ! -d "$DATA_DIR" ]; then
+    echo "data dir does not exist: $DATA_DIR" >&2
+    exit 66
+fi
+
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+DEST="$SNAP_ROOT/$STAMP"
+mkdir -p "$DEST"
+
+# Copy every top-level entry under DATA_DIR except the snapshot
+# root itself (don't snapshot the snapshots). An empty data tree
+# leaves the glob literal, which the -e guard skips.
+SNAP_BASE="$(basename "$SNAP_ROOT")"
+for entry in "$DATA_DIR"/*; do
+    [ -e "$entry" ] || continue
+    name="$(basename "$entry")"
+    [ "$name" = "$SNAP_BASE" ] && continue
+    cp -a "$entry" "$DEST/"
+done
+
+echo "snapshot written: $DEST"
+
+# Retention: keep the newest $KEEP snapshot dirs (timestamp names
+# sort chronologically, so reverse-sort puts newest first), prune
+# the rest.
+ls -1d "$SNAP_ROOT"/*/ 2>/dev/null \
+  | sort -r \
+  | tail -n +"$((KEEP + 1))" \
+  | while read -r old; do
+        echo "pruning old snapshot: $old"
+        rm -rf "$old"
+    done
+
+echo "retained newest $KEEP snapshot(s) under $SNAP_ROOT"

@@ -10,6 +10,28 @@ empty and is filled forward from this point.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-01
+
+### Added
+- **`bin/needle-snapshot`** — a shipped point-in-time snapshot of
+  the fingerprint-database tree, so DEPLOYMENT.md's "weekly
+  snapshot" is a command (`docker compose exec needle
+  /app/bin/needle-snapshot`) instead of a hand-written rsync line.
+  Copies `/data` to a date-stamped dir (default
+  `/data/snapshots/<UTC>`, riding the volume) with keep-last-N
+  pruning; tunable via `NEEDLE_SNAPSHOT_DIR` /
+  `NEEDLE_SNAPSHOT_KEEP`. Uses `cp -a` (no rsync in the slim
+  image). Covers the bit-rot and operator-mistake failure modes
+  the deploy doc calls out.
+
+### Changed
+- `api.version` `0.2.1 -> 0.3.0`.
+
+### Note
+- The roadmap's "more fingerprint categories" item for 0.3.0 is
+  deferred: it's demand-driven and no concrete new category has
+  been requested. The category surface is unchanged.
+
 ## [0.2.1] - 2026-05-22
 
 ### Fixed
