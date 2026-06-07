@@ -21,6 +21,7 @@ on:
         required: true
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   REGISTRY: kibble.apps.blindhub.ca
   IMAGE: cobdfamily/needle
 
